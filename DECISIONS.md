@@ -75,10 +75,10 @@ Full camouflage fixing BUG-L3. Set both `/proc/self/comm` via `prctl(PR_SET_NAME
 
 Targets: `aarch64-linux-android` (primary) + `armv7-neon-linux-androideabi` (legacy). NDK API level 21. Optional `build-std` for size optimization. `RUSTFLAGS="-C default-linker-libraries"` for Android compatibility.
 
-### R10: Binary size optimization
-**Status:** DECIDED
+### R10: Release profile — standard optimizations, no artificial size target
+**Status:** CONFIRMED
 
-Release profile: `lto = true`, `strip = true`, `panic = "abort"`, `opt-level = "z"`, `codegen-units = 1`. Target under 1MB. If exceeded: `build-std` with `panic_immediate_abort`, minimize dependency tree.
+Release profile: `lto = true`, `strip = true`, `opt-level = "s"`, `codegen-units = 1`. No arbitrary size target — let the compiler produce whatever it produces. Realistic expectation: 2-5MB per architecture with real dependencies (clap, serde, rayon, tracing). No `build-std` or `panic = "abort"` contortions needed.
 
 ---
 
@@ -134,10 +134,10 @@ Hardcode mount source name to `"KSU"` for all overlay/tmpfs mounts. Required for
 
 Register all mount points with KSU's try_umount system after overlay creation. If SUSFS available, use `add_try_umount`. Otherwise use KSU native `kernel_umount` feature. VFS mode uses its own UID blocklist (separate mechanism, no mounts to unmount).
 
-### ME11: Random mount paths
-**Status:** DECIDED
+### ME11: Random mount paths — auto-generated per boot, never persisted
+**Status:** CONFIRMED
 
-All staging areas use randomized 12-char alphanumeric paths under `/mnt/` (or `/mnt/vendor/` fallback). Fixed paths are fingerprintable. Random paths require brute-force enumeration by detection tools.
+All staging areas use a random 12-char alphanumeric path under `/mnt/` (or `/mnt/vendor/` fallback), generated fresh every boot by the Rust binary. The path exists only in process memory — never written to config, never exposed in WebUI. Unlike mountify (user-configured persistent path), this is automatic and changes every reboot. Detection apps would need to enumerate `/mnt/` during the brief window between directory creation and backing file deletion (ME12).
 
 ### ME12: NukeExt4Sysfs — destroy backing evidence
 **Status:** DECIDED
@@ -240,10 +240,16 @@ SUSFS consumes this at 3 check points for per-UID visibility decisions. Without 
 
 Probe order: (1) `/dev/zeromount` existence, (2) `GET_VERSION` ioctl for driver version, (3) `/proc/filesystems` for zeromount entry, (4) `/proc/config.gz` for `CONFIG_ZEROMOUNT=y`. Steps 1+2 always, 3-4 only on first boot or version mismatch.
 
-### DET03: SUSFS binary availability detection
-**Status:** DECIDED
+### DET03: SUSFS detection — three-layer probe
+**Status:** CONFIRMED
 
-Search order: `/data/adb/ksu/bin/ksu_susfs` → `/data/adb/ksu/bin/susfs` → `$PATH`. Probe capabilities by parsing help output for subcommand names. All 7 capabilities present = FULL, some = SUSFS_FRONTEND, none/missing = KERNEL_ONLY.
+Three independent checks, in order:
+
+1. **Module state** — check for `.disabled` marker in SUSFS module dir (`/data/adb/modules/susfs4ksu/` or BRENE equivalent). If disabled, skip all SUSFS operations regardless of binary/kernel availability.
+2. **Binary availability** — search `/data/adb/ksu/bin/ksu_susfs` → `/data/adb/ksu/bin/susfs` → `$PATH`. Probe standard capabilities only (path, mount, kstat, maps, open_redirect). The binary stays vanilla upstream — never probed for custom commands.
+3. **Custom kernel ioctls** — Rust binary probes the kernel directly for ZeroMount's build-time patched commands (`kstat_redirect`, `open_redirect_all`). These live in our kernel patches (S01), not the SUSFS binary. Graceful degradation if custom ioctls absent (user built kernel with vanilla SUSFS only).
+
+Separation of concern: SUSFS binary is upstream, untouched. Custom capabilities are our Rust binary + our kernel patches. Upstream SUSFS module/binary updates never break ZeroMount.
 
 ### DET04: inotify-based event watching
 **Status:** CONFIRMED
@@ -367,10 +373,10 @@ SettingsTab directly imports `api` instead of using store (ARCH-7). Move to stor
 
 CI clones upstream SUSFS at pinned commit (stored in `susfs-version.txt`), applies ZeroMount coupling patch via `git apply`, fails CI if patch rejects. Ensures reproducible builds and immediate detection of upstream incompatibility.
 
-### B02: Rust cross-compilation
-**Status:** DECIDED
+### B02: Rust cross-compilation — all four ABIs
+**Status:** CONFIRMED
 
-`cargo-ndk` with NDK API 21. Targets: `aarch64-linux-android` + `armv7-linux-androideabi`. Static `std` with aggressive LTO + strip. Optional `build-std` if size exceeds target.
+`cargo-ndk` with NDK API 21. Four targets: `aarch64-linux-android` (arm64-v8a), `armv7-linux-androideabi` (armeabi-v7a), `x86_64-linux-android` (x86_64), `i686-linux-android` (x86). Static std with LTO + strip per R10. Covers real devices (ARM64/ARM32), emulators (x86/x86_64), and Chromebooks.
 
 ### B03: WebUI build integration
 **Status:** DECIDED
@@ -413,21 +419,140 @@ BUG-L1. Single source of truth: `module.prop:version`. Rust binary reads it at s
 
 ---
 
-## Decision Count
+## NEW: SUSFS Expansion (Session 2 Findings)
 
-| Category | Count | CONFIRMED | DECIDED |
-|----------|-------|-----------|---------|
-| Rust Binary (R) | 10 | 1 | 9 |
-| Mount Engine (ME) | 12 | 1 | 11 |
-| VFS Integration (VFS) | 7 | 1 | 6 |
-| SUSFS Integration (S) | 6 | 3 | 3 |
-| Detection System (DET) | 7 | 1 | 6 |
-| Platform Integration (KSU) | 10 | 1 | 9 |
-| WebUI (W) | 7 | 1 | 6 |
-| Build System (B) | 5 | 1 | 4 |
-| Carry-Over Fixes (CO) | 4 | 0 | 4 |
-| **Total** | **68** | **10** | **58** |
+### S07: Font mounting fallback to OverlayFS
+**Status:** PENDING
+
+`open_redirect` and `open_redirect_all` (custom command `0x555c1`) are the primary font handling strategy. If testing shows they don't work reliably for all font/audio modules, fall back to OverlayFS strictly for font/audio modules even in VFS mode. This would be the ONE exception to VFS02's "no mixed mode" rule. Requires testing on real device to determine.
+
+### S08: BRENE feature integration — configurable automation
+**Status:** PENDING
+
+BRENE (github.com/rrr333nnn333/BRENE) is a userspace SUSFS module with opinionated defaults. NOT a kernel fork — calls the same `ksu_susfs` binary. ZeroMount absorbs BRENE's automation features as **configurable toggles** in WebUI settings. Candidate features:
+
+| Feature | Default | Notes |
+|---------|---------|-------|
+| Auto-hide injected APKs (vendor/product/system_ext) | ON | Modules inject APKs that detection apps find |
+| Auto-hide zygisk `.so` in `/proc/pid/maps` | ON | Zygisk modules leave traces |
+| Auto-hide font `.otf`/`.ttf` in maps | ON | Font modules leave traces |
+| Auto-hide rooted app folders (MT2, AppManager, etc.) | OFF | User-configurable list, not hardcoded |
+| Auto-hide recovery folders (TWRP, OrangeFox, etc.) | OFF | User-configurable list |
+| Auto-hide `/data/local/tmp` contents | OFF | Aggressive, could break legitimate tools |
+| Auto-hide `/sdcard/Android/data` packages | OFF | Very aggressive, hides all app data dirs |
+| Custom `sus_path` list (user-editable) | Empty | Text-based list in config, editable via WebUI |
+| Custom `sus_map` list (user-editable) | Empty | Text-based list in config, editable via WebUI |
+| Custom `sus_path_loop` list (user-editable) | Empty | Text-based list in config, editable via WebUI |
+| Uname spoofing (3 modes: off, strip, custom) | Strip | Removes kernel build markers |
+| Property spoofing | ON | ~30 properties reset to stock values |
+| AVC log spoofing | ON | Hides SUSFS-related audit logs |
+
+**CRITICAL CONSTRAINT:** Mount hiding (`sus_mount`, `hide_sus_mnts`) is EXCLUDED per S05. BRENE's `hide_sus_mnts_for_non_su_procs` call must NOT be included — this is the root cause of the LSPosed bug.
+
+**BRENE conflict:** BRENE disables upstream SUSFS module on install. ZeroMount should do the same — we absorb SUSFS userspace orchestration entirely.
+
+### S09: Custom SUSFS command — `kstat_redirect` (`0x55573`)
+**Status:** PENDING
+
+Custom kernel command `CMD_SUSFS_ADD_SUS_KSTAT_REDIRECT` exists in the ZeroMount SUSFS fork at `/home/claudetest/gki-build/susfs4ksu-new/`. The Rust binary must support this alongside upstream `add_sus_kstat_statically`. Capability probing (DET03) must detect whether this custom command is available. Requires line-by-line diff of fork vs upstream to determine exact patch boundaries for build-time patching (S01).
+
+**Fork location:** `/home/claudetest/gki-build/susfs4ksu-new/`
+**Custom handler injection:** `kernel_patches/inject-susfs-custom-handlers.sh`
+
+### S10: Custom SUSFS command — `open_redirect_all` (`0x555c1`)
+**Status:** PENDING
+
+Custom kernel command `CMD_SUSFS_ADD_OPEN_REDIRECT_ALL` redirects file opens for ALL UIDs, not just per-UID. Used for font handling where all processes need to see the redirected font. The Rust binary must support this. Falls back to per-UID `open_redirect` if custom command unavailable.
+
+### S11: SUSFS unicode filter (`KSU_SUSFS_UNICODE_FILTER`)
+**Status:** PENDING
+
+Custom Kconfig option in the fork that blocks scoped storage bypass via unicode path manipulation. This is a kernel-level feature — the Rust binary doesn't need to do anything, but the build-time patching (S01) must include this patch. Decision: include in our patch chain or defer?
+
+### S12: SUSFS config — direct binary calls, no config files
+**Status:** PENDING
+
+Current `susfs_update_config()` writes config files that nothing appears to read (ARCH-5). The Rust binary calls `ksu_susfs` commands directly — no config files, no symlinks. SUSFS config files are a v1 artifact. All configuration lives in ZeroMount's own `config.toml`.
+
+### S13: SUSFS fork diff — exact patch boundaries
+**Status:** PENDING (pre-implementation task)
+
+Full line-by-line diff between upstream SUSFS (`gitlab.com/simonpunk/susfs4ksu`) and the custom fork (`/home/claudetest/gki-build/susfs4ksu-new/`) is required before implementation. This determines: (1) which patches go in `zeromount-susfs-coupling.patch`, (2) which custom commands exist, (3) what the build-time patching CI step needs to apply. This is a team task, not a solo decision.
 
 ---
 
-*Last updated: 2026-02-08 — Session 2*
+## NEW: WebUI Expansion (Session 2 Findings)
+
+### W08: Glass morphism toggle migration
+**Status:** PENDING
+
+Replace Material Web Components toggle with custom glass morphism toggle from `/home/president/Git-repo-success/glass-toggle.css`. Accent-adaptive via `--accent-rgb` CSS custom property. Uses standard CSS (no exotic features), compatible with Android WebView. Applied to: engine toggle (StatusTab), all SUSFS capability toggles (SettingsTab), BRENE feature toggles.
+
+### W09: BRENE-style feature toggles in settings
+**Status:** PENDING
+
+New settings section for SUSFS automation features (from S08). Hierarchical toggle groups:
+- **Auto-hiding** (parent toggle) → APK injection, zygisk maps, font maps, rooted app folders, recovery folders, `/data/local/tmp`, `/sdcard/Android/data`
+- **Custom lists** → sus_path, sus_map, sus_path_loop (text-area input, WebUI editable)
+- **Spoofing** → Uname (3 modes), properties, AVC logs
+Each sub-toggle disabled when parent capability unavailable (matches W03 pattern).
+
+---
+
+## NEW: Reference Paths (for implementation team)
+
+### Source Code
+| Path | Contents |
+|------|----------|
+| `/home/claudetest/zero-mount/zeromount/` | ZeroMount v1 module (current production) |
+| `/home/claudetest/gki-build/susfs4ksu-new/` | Custom SUSFS fork (2 custom commands + ZeroMount coupling) |
+| `/home/claudetest/zero-mount/susfs-module/` | SUSFS flashable module with prebuilt binaries |
+
+### Reference Documentation
+| Path | Contents |
+|------|----------|
+| `/home/claudetest/zero-mount/reference/kernelsu-module-webui.md` | KernelSU WebUI integration guide |
+| `/home/claudetest/zero-mount/reference/kernelsu-module-guide.md` | KernelSU module development guide |
+| `/home/claudetest/zero-mount/reference/kernelsu-module-config.md` | KernelSU module config API |
+| `/home/claudetest/zero-mount/reference/kernelsu-additional-docs.md` | Additional KernelSU documentation |
+| `/home/claudetest/gki-build/METAMODULE_COMPLETE_GUIDE.md` | Metamodule complete development guide |
+
+### Kernel & Build
+| Path | Contents |
+|------|----------|
+| `/home/claudetest/gki-build/kernel-test/android12-5.10-2024-05` | Kernel source (android12-5.10) |
+| `/home/claudetest/gki-build/quick-fetch` | Shallow AOSP source |
+| `/home/claudetest/gki-build/kernelsu-next-vanilla` | KernelSU-Next vanilla build setup |
+
+### Analysis & Context
+| Path | Contents |
+|------|----------|
+| `/home/claudetest/zero-mount/context-gathering/output/` | Full context analysis output (all projects) |
+| `/home/president/Git-repo-success/glass-toggle.css` | Glass morphism toggle CSS for WebUI |
+
+### External Repos
+| Repo | Purpose |
+|------|---------|
+| `https://github.com/rrr333nnn333/BRENE` | BRENE SUSFS userspace module (feature reference) |
+| `https://gitlab.com/simonpunk/susfs4ksu` | Upstream SUSFS (diff baseline) |
+
+---
+
+## Decision Count
+
+| Category | Count | CONFIRMED | DECIDED | PENDING |
+|----------|-------|-----------|---------|---------|
+| Rust Binary (R) | 10 | 2 | 8 | 0 |
+| Mount Engine (ME) | 12 | 2 | 10 | 0 |
+| VFS Integration (VFS) | 7 | 1 | 6 | 0 |
+| SUSFS Integration (S) | 13 | 3 | 3 | 7 |
+| Detection System (DET) | 7 | 2 | 5 | 0 |
+| Platform Integration (KSU) | 10 | 1 | 9 | 0 |
+| WebUI (W) | 9 | 1 | 6 | 2 |
+| Build System (B) | 5 | 2 | 3 | 0 |
+| Carry-Over Fixes (CO) | 4 | 0 | 4 | 0 |
+| **Total** | **77** | **14** | **54** | **9** |
+
+---
+
+*Last updated: 2026-02-08 — Session 2 (all subsystems reviewed, DET03/B02/R10 updated, SUSFS/WebUI expansion pending)*

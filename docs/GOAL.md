@@ -21,7 +21,7 @@ A Rust-based KernelSU/APatch metamodule that mounts modules via VFS redirection 
 - NOT building a new kernel patch — existing zeromount.c patches are reused
 - NOT replacing SUSFS — we consume its API, not reimplement it
 - NOT building a persistent background daemon — on-demand CLI + inotify watcher only
-- NOT supporting x86/x86_64 Android (ARM64 + ARM32 only)
+- NOT supporting riscv64 Android (ARM64 + ARM32 + x86_64 + x86 supported)
 
 ## Why This Matters
 
