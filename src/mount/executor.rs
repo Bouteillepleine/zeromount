@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use tracing::{debug, info, warn};
 
+use crate::core::config::MountConfig;
 use crate::core::types::{
     CapabilityFlags, MountPlan, MountResult, MountStrategy, ScannedModule,
 };
@@ -16,12 +17,12 @@ pub fn execute_plan(
     modules: &[ScannedModule],
     strategy: MountStrategy,
     capabilities: &CapabilityFlags,
+    mount_config: &MountConfig,
 ) -> Result<Vec<MountResult>> {
     match strategy {
-        MountStrategy::Overlay => execute_overlay(plan, modules, capabilities),
-        MountStrategy::MagicMount => execute_magic_mount(modules, capabilities),
+        MountStrategy::Overlay => execute_overlay(plan, modules, capabilities, mount_config),
+        MountStrategy::MagicMount => execute_magic_mount(modules, capabilities, mount_config),
         MountStrategy::Vfs => {
-            // VFS is handled by vfs::executor, not here
             Ok(Vec::new())
         }
     }
@@ -31,8 +32,9 @@ fn execute_overlay(
     plan: &MountPlan,
     modules: &[ScannedModule],
     capabilities: &CapabilityFlags,
+    mount_config: &MountConfig,
 ) -> Result<Vec<MountResult>> {
-    let mut storage = init_storage(capabilities).context("storage init for overlay failed")?;
+    let mut storage = init_storage(capabilities, mount_config).context("storage init for overlay failed")?;
 
     let module_map: std::collections::HashMap<&str, &ScannedModule> =
         modules.iter().map(|m| (m.id.as_str(), m)).collect();
@@ -84,8 +86,9 @@ fn execute_overlay(
 fn execute_magic_mount(
     modules: &[ScannedModule],
     capabilities: &CapabilityFlags,
+    mount_config: &MountConfig,
 ) -> Result<Vec<MountResult>> {
-    let mut storage = init_storage(capabilities).context("storage init for magic mount failed")?;
+    let mut storage = init_storage(capabilities, mount_config).context("storage init for magic mount failed")?;
 
     let mut results = Vec::new();
     for module in modules {

@@ -246,7 +246,7 @@ impl MountController<Planned> {
         if config.mount.overlay_preferred {
             info!("executing via overlay (preferred)");
             let results = crate::mount::executor::execute_plan(
-                plan, modules, MountStrategy::Overlay, caps,
+                plan, modules, MountStrategy::Overlay, caps, &config.mount,
             )?;
             if results.iter().all(|r| r.success) || !config.mount.magic_mount_fallback {
                 return Ok(results);
@@ -262,12 +262,12 @@ impl MountController<Planned> {
         &self,
         modules: &[ScannedModule],
         plan: &MountPlan,
-        _config: &ZeroMountConfig,
+        config: &ZeroMountConfig,
     ) -> Result<Vec<MountResult>> {
         let caps = &self.state.detection.capabilities;
         info!("executing via magic mount (fallback)");
         crate::mount::executor::execute_plan(
-            plan, modules, MountStrategy::MagicMount, caps,
+            plan, modules, MountStrategy::MagicMount, caps, &config.mount,
         )
     }
 }

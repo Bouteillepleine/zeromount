@@ -6,7 +6,7 @@ import { Input } from '../components/core/Input';
 import { Modal } from '../components/layout/Modal';
 import { store } from '../lib/store';
 import { GITHUB_URL } from '../lib/constants';
-import type { BreneSettings, SusfsSettings, UnameMode } from '../lib/types';
+import type { BreneSettings, SusfsSettings, UnameMode, MountStrategy, StorageMode } from '../lib/types';
 import "./SettingsTab.css";
 
 const accentColors = [
@@ -215,6 +215,112 @@ Engine: ${store.engineActive() ? 'Active' : 'Inactive'}
             CLEAR ALL RULES
           </Button>
         </div>
+      </Card>
+
+      {/* Mount Engine -- strategy + storage mode, capability-gated */}
+      <Card>
+        <h3 class="settings__section-title">
+          <svg class="settings__section-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 10H6v-2h8v2zm4-4H6v-2h12v2z"/>
+          </svg>
+          Mount Engine
+        </h3>
+
+        <div class="settings__group">
+          <div class="settings__item-label">Mount Strategy</div>
+          <div class="settings__item-desc" style={{ "margin-bottom": "12px" }}>
+            {caps()?.vfs_driver
+              ? 'VFS driver detected — auto-selects VFS when kernel driver is present'
+              : 'No VFS driver — controls overlay vs magic mount preference'}
+          </div>
+          <div class="settings__strategies">
+            <button
+              class={`settings__strategy${store.activeStrategy() === 'Vfs' ? ' settings__strategy--active' : ''}${!caps()?.vfs_driver ? ' settings__strategy--disabled' : ''}`}
+              onClick={() => store.setMountStrategy('Vfs')}
+              disabled={!caps()?.vfs_driver}
+              title={!caps()?.vfs_driver ? 'VFS kernel driver not available' : 'Auto: VFS when driver present, overlay/magic fallback'}
+            >
+              <div style={{ "margin-bottom": "4px" }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill={store.activeStrategy() === 'Vfs' ? 'var(--text-accent)' : 'var(--text-secondary)'}>
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+              </div>
+              <div class={`settings__strategy-label${store.activeStrategy() === 'Vfs' ? ' settings__strategy-label--active' : ''}`}>
+                VFS
+              </div>
+              <div class="settings__strategy-hint">Auto / Kernel</div>
+            </button>
+
+            <button
+              class={`settings__strategy${store.activeStrategy() === 'Overlay' ? ' settings__strategy--active' : ''}${!caps()?.overlay_supported ? ' settings__strategy--disabled' : ''}`}
+              onClick={() => store.setMountStrategy('Overlay')}
+              disabled={!caps()?.overlay_supported}
+              title={!caps()?.overlay_supported ? 'OverlayFS not supported on this kernel' : 'Prefer OverlayFS stacked filesystem'}
+            >
+              <div style={{ "margin-bottom": "4px" }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill={store.activeStrategy() === 'Overlay' ? 'var(--text-accent)' : 'var(--text-secondary)'}>
+                  <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/>
+                </svg>
+              </div>
+              <div class={`settings__strategy-label${store.activeStrategy() === 'Overlay' ? ' settings__strategy-label--active' : ''}`}>
+                Overlay
+              </div>
+              <div class="settings__strategy-hint">OverlayFS</div>
+            </button>
+
+            <button
+              class={`settings__strategy${store.activeStrategy() === 'MagicMount' ? ' settings__strategy--active' : ''}`}
+              onClick={() => store.setMountStrategy('MagicMount')}
+              title="Bind mounts (Magisk-style) — always available"
+            >
+              <div style={{ "margin-bottom": "4px" }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill={store.activeStrategy() === 'MagicMount' ? 'var(--text-accent)' : 'var(--text-secondary)'}>
+                  <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
+                </svg>
+              </div>
+              <div class={`settings__strategy-label${store.activeStrategy() === 'MagicMount' ? ' settings__strategy-label--active' : ''}`}>
+                Magic
+              </div>
+              <div class="settings__strategy-hint">Bind Mount</div>
+            </button>
+          </div>
+        </div>
+
+        {/* Storage + random paths only apply to overlay/magic — VFS uses kernel driver */}
+        <Show when={store.activeStrategy() !== 'Vfs'}>
+          <div class="settings__item" style={{ "margin-top": "16px" }}>
+            <div class="settings__item-content">
+              <div class="settings__item-label">Storage Backend</div>
+              <div class="settings__item-desc">
+                Filesystem for staging module content
+                {caps()?.tmpfs_xattr ? '' : ' (tmpfs lacks xattr — overlay whiteouts unavailable)'}
+              </div>
+            </div>
+            <select
+              class="settings__select"
+              value={store.settings.mount.storage_mode}
+              onChange={(e) => store.setMountStorageMode(e.currentTarget.value as StorageMode)}
+            >
+              <option value="auto">Auto</option>
+              <option value="erofs" disabled={!caps()?.erofs_supported}>
+                EROFS{!caps()?.erofs_supported ? ' (unavailable)' : ''}
+              </option>
+              <option value="tmpfs">tmpfs</option>
+              <option value="ext4">ext4</option>
+            </select>
+          </div>
+
+          <div class="settings__item">
+            <div class="settings__item-content">
+              <div class="settings__item-label">Random Mount Paths</div>
+              <div class="settings__item-desc">Randomize staging directory names at boot</div>
+            </div>
+            <Toggle
+              checked={store.settings.mount.random_mount_paths}
+              onChange={(v) => store.setMountToggle('random_mount_paths', v)}
+            />
+          </div>
+        </Show>
       </Card>
 
       {/* SUSFS Integration -- capability-aware hierarchical toggles */}

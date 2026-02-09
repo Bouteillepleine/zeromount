@@ -48,4 +48,5 @@ susfs4ksu-new/
 zeromount/
 
 # Compiled binaries (built via CI)
-module/zm-*
+module/bin/*/zeromount
+module/bin/*/aapt

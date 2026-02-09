@@ -1,6 +1,6 @@
 import { createSignal, createRoot, createMemo, createEffect } from 'solid-js';
 import { createStore } from 'solid-js/store';
-import type { Tab, Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo, Settings, InstalledApp, KsuModule, CapabilityFlags, ModuleStatus, BreneSettings, SusfsSettings, UnameSettings, UnameMode } from './types';
+import type { Tab, Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo, Settings, InstalledApp, KsuModule, CapabilityFlags, ModuleStatus, BreneSettings, SusfsSettings, UnameSettings, UnameMode, MountSettings, StorageMode, MountStrategy } from './types';
 import { api, shouldUseMock } from './api';
 import { listPackages, getPackagesInfo, getAppLabelViaAapt } from './ksuApi';
 import { darkTheme, lightTheme, amoledTheme, applyTheme, applyAccent, getAccentStyles, accentPresets } from './theme';
@@ -95,6 +95,13 @@ function createAppStore() {
     version: '',
   };
 
+  const defaultMount: MountSettings = {
+    storage_mode: 'auto',
+    overlay_preferred: true,
+    magic_mount_fallback: true,
+    random_mount_paths: true,
+  };
+
   const [settings, setSettings] = createStore<Settings>({
     theme: (savedTheme || 'amoled') as 'dark' | 'light' | 'auto' | 'amoled',
     accentColor: initialAccent,
@@ -104,6 +111,7 @@ function createAppStore() {
     brene: { ...defaultBrene },
     susfs: { ...defaultSusfs },
     uname: { ...defaultUname },
+    mount: { ...defaultMount },
   });
 
   const [systemPrefersDark, setSystemPrefersDark] = createSignal(
@@ -206,6 +214,7 @@ function createAppStore() {
         api.scanKsuModules(),
         loadBreneSettings(),
         settings.autoAccentColor ? api.fetchSystemColor() : Promise.resolve(null),
+        loadMountSettings(),
       ]);
 
       const status = results[0].status === 'fulfilled' ? results[0].value : null;
@@ -469,6 +478,92 @@ function createAppStore() {
     }
   };
 
+  const loadMountSettings = async () => {
+    console.log('[ZM-Store] loadMountSettings() starting...');
+    const boolKeys: (keyof MountSettings)[] = [
+      'overlay_preferred', 'magic_mount_fallback', 'random_mount_paths',
+    ];
+    const results = await Promise.allSettled([
+      api.configGet('mount.storage_mode'),
+      ...boolKeys.map(k => api.configGet(`mount.${k}`)),
+    ]);
+    const mount: Partial<MountSettings> = {};
+    if (results[0].status === 'fulfilled' && results[0].value !== null) {
+      mount.storage_mode = results[0].value as StorageMode;
+    }
+    boolKeys.forEach((key, i) => {
+      const r = results[i + 1];
+      if (r.status === 'fulfilled' && r.value !== null) {
+        (mount as any)[key] = r.value === 'true';
+      }
+    });
+    setSettings('mount', prev => ({ ...prev, ...mount }));
+    console.log('[ZM-Store] loadMountSettings() loaded:', mount);
+  };
+
+  const setMountStorageMode = async (mode: StorageMode) => {
+    console.log('[ZM-Store] setMountStorageMode() called:', mode);
+    const prev = settings.mount.storage_mode;
+    setSettings('mount', 'storage_mode', mode);
+    try {
+      await api.configSet('mount.storage_mode', mode);
+      console.log('[ZM-Store] setMountStorageMode() saved:', mode);
+    } catch (e) {
+      console.error('[ZM-Store] setMountStorageMode() error:', e);
+      showToast('Failed to save storage mode', 'error');
+      setSettings('mount', 'storage_mode', prev);
+    }
+  };
+
+  const setMountToggle = async (key: 'overlay_preferred' | 'magic_mount_fallback' | 'random_mount_paths', value: boolean) => {
+    console.log('[ZM-Store] setMountToggle() called:', key, value);
+    const prev = settings.mount[key];
+    setSettings('mount', key, value);
+    try {
+      await api.configSet(`mount.${key}`, String(value));
+      console.log('[ZM-Store] setMountToggle() saved:', key, value);
+    } catch (e) {
+      console.error('[ZM-Store] setMountToggle() error:', e);
+      showToast(`Failed to save ${key}`, 'error');
+      setSettings('mount', key, prev);
+    }
+  };
+
+  const setMountStrategy = async (strategy: MountStrategy) => {
+    console.log('[ZM-Store] setMountStrategy() called:', strategy);
+    const prevOverlay = settings.mount.overlay_preferred;
+    const prevMagic = settings.mount.magic_mount_fallback;
+
+    const mapping: Record<MountStrategy, [boolean, boolean]> = {
+      'Vfs': [true, true],
+      'Overlay': [true, false],
+      'MagicMount': [false, true],
+    };
+    const [newOverlay, newMagic] = mapping[strategy];
+
+    setSettings('mount', 'overlay_preferred', newOverlay);
+    setSettings('mount', 'magic_mount_fallback', newMagic);
+
+    try {
+      await Promise.all([
+        api.configSet('mount.overlay_preferred', String(newOverlay)),
+        api.configSet('mount.magic_mount_fallback', String(newMagic)),
+      ]);
+      console.log('[ZM-Store] setMountStrategy() saved:', strategy, '→ overlay_preferred:', newOverlay, 'magic_mount_fallback:', newMagic);
+    } catch (e) {
+      console.error('[ZM-Store] setMountStrategy() error:', e);
+      showToast('Failed to save mount strategy', 'error');
+      setSettings('mount', 'overlay_preferred', prevOverlay);
+      setSettings('mount', 'magic_mount_fallback', prevMagic);
+    }
+  };
+
+  const activeStrategy = (): MountStrategy => {
+    if (settings.mount.overlay_preferred && settings.mount.magic_mount_fallback) return 'Vfs';
+    if (settings.mount.overlay_preferred && !settings.mount.magic_mount_fallback) return 'Overlay';
+    return 'MagicMount';
+  };
+
   const loadRuntimeStatus = async () => {
     try {
       const status = await api.getRuntimeStatus();
@@ -717,6 +812,11 @@ function createAppStore() {
     setSusfsToggle,
     setUnameMode,
     setUnameField,
+    loadMountSettings,
+    setMountStrategy,
+    setMountStorageMode,
+    setMountToggle,
+    activeStrategy,
     scanKsuModules,
     loadKsuModule,
     unloadKsuModule,

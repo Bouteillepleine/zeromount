@@ -314,4 +314,8 @@ const mockBreneConfig: Record<string, string> = {
   'brene.auto_hide_sdcard_data': 'true',
   'brene.avc_log_spoofing': 'false',
   'uname.mode': 'disabled',
+  'mount.storage_mode': 'auto',
+  'mount.overlay_preferred': 'true',
+  'mount.magic_mount_fallback': 'true',
+  'mount.random_mount_paths': 'true',
 };

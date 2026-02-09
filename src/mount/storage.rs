@@ -6,10 +6,12 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use tracing::{debug, info, warn};
 
+use crate::core::config::{MountConfig, StorageMode as ConfigStorageMode};
 use crate::core::types::CapabilityFlags;
 
 const MOUNT_SOURCE: &str = "KSU";
 const RANDOM_PATH_LEN: usize = 12;
+const FIXED_PATH_NAME: &str = "zeromount";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageMode {
@@ -58,66 +60,55 @@ impl Drop for StorageHandle {
     }
 }
 
-/// ME01: Probe capabilities and initialize storage via cascade: EROFS -> tmpfs -> ext4 -> bare.
-/// Returns a handle with a random mount path under /mnt/ (ME11).
-pub fn init_storage(capabilities: &CapabilityFlags) -> Result<StorageHandle> {
-    let base_path = generate_random_path();
+/// ME01: Initialize storage respecting config preference, falling back via cascade.
+/// ME11: Random or fixed mount path under /mnt/.
+pub fn init_storage(capabilities: &CapabilityFlags, mount_config: &MountConfig) -> Result<StorageHandle> {
+    let base_path = if mount_config.random_mount_paths {
+        generate_random_path()
+    } else {
+        generate_fixed_path()
+    };
+
+    info!(path = %base_path.display(), random = mount_config.random_mount_paths, "staging path selected");
 
     fs::create_dir_all(&base_path)
         .with_context(|| format!("cannot create staging dir: {}", base_path.display()))?;
 
-    // 1. EROFS: best compression, read-only (ideal for module content)
-    if capabilities.erofs_supported && is_erofs_available() {
-        match try_erofs_storage(&base_path) {
-            Ok(()) => {
-                info!(mode = "erofs", path = %base_path.display(), "storage initialized");
-                return Ok(StorageHandle {
-                    mode: StorageMode::Erofs,
-                    base_path,
-                    cleaned_up: false,
-                });
+    // If user forced a specific mode, try it first
+    match mount_config.storage_mode {
+        ConfigStorageMode::Erofs => {
+            if let Some(handle) = try_mode_erofs(&base_path, capabilities) {
+                return Ok(handle);
             }
-            Err(e) => {
-                debug!(error = %e, "EROFS init failed, trying tmpfs");
-                let _ = do_umount(&base_path);
-            }
+            warn!("forced EROFS failed, falling back to cascade");
         }
+        ConfigStorageMode::Tmpfs => {
+            if let Some(handle) = try_mode_tmpfs(&base_path, capabilities) {
+                return Ok(handle);
+            }
+            warn!("forced tmpfs failed, falling back to cascade");
+        }
+        ConfigStorageMode::Ext4 => {
+            if let Some(handle) = try_mode_ext4(&base_path) {
+                return Ok(handle);
+            }
+            warn!("forced ext4 failed, falling back to cascade");
+        }
+        ConfigStorageMode::Auto => {}
     }
 
-    // 2. tmpfs: fast, in-memory — requires xattr support for overlay whiteouts
-    if capabilities.tmpfs_xattr {
-        match try_tmpfs_with_xattr(&base_path) {
-            Ok(()) => {
-                info!(mode = "tmpfs", path = %base_path.display(), "storage initialized");
-                return Ok(StorageHandle {
-                    mode: StorageMode::Tmpfs,
-                    base_path,
-                    cleaned_up: false,
-                });
-            }
-            Err(e) => {
-                debug!(error = %e, "tmpfs with xattr failed, trying ext4");
-                let _ = do_umount(&base_path);
-            }
-        }
+    // Cascade: EROFS -> tmpfs+xattr -> ext4 -> bare tmpfs
+    if let Some(handle) = try_mode_erofs(&base_path, capabilities) {
+        return Ok(handle);
+    }
+    if let Some(handle) = try_mode_tmpfs(&base_path, capabilities) {
+        return Ok(handle);
+    }
+    if let Some(handle) = try_mode_ext4(&base_path) {
+        return Ok(handle);
     }
 
-    // 3. ext4 loopback: sparse image, full POSIX semantics
-    match try_ext4_storage(&base_path) {
-        Ok(()) => {
-            info!(mode = "ext4", path = %base_path.display(), "storage initialized");
-            return Ok(StorageHandle {
-                mode: StorageMode::Ext4,
-                base_path,
-                cleaned_up: false,
-            });
-        }
-        Err(e) => {
-            debug!(error = %e, "ext4 loopback failed, falling back to bare tmpfs");
-        }
-    }
-
-    // 4. Bare tmpfs fallback (no xattr guarantee)
+    // Bare tmpfs fallback (no xattr guarantee)
     match mount_tmpfs_at(&base_path) {
         Ok(()) => {
             info!(mode = "tmpfs", path = %base_path.display(), "storage initialized (bare fallback)");
@@ -131,6 +122,53 @@ pub fn init_storage(capabilities: &CapabilityFlags) -> Result<StorageHandle> {
         base_path,
         cleaned_up: false,
     })
+}
+
+fn try_mode_erofs(base_path: &Path, capabilities: &CapabilityFlags) -> Option<StorageHandle> {
+    if !capabilities.erofs_supported || !is_erofs_available() {
+        return None;
+    }
+    match try_erofs_storage(base_path) {
+        Ok(()) => {
+            info!(mode = "erofs", path = %base_path.display(), "storage initialized");
+            Some(StorageHandle { mode: StorageMode::Erofs, base_path: base_path.to_path_buf(), cleaned_up: false })
+        }
+        Err(e) => {
+            debug!(error = %e, "EROFS init failed");
+            let _ = do_umount(base_path);
+            None
+        }
+    }
+}
+
+fn try_mode_tmpfs(base_path: &Path, capabilities: &CapabilityFlags) -> Option<StorageHandle> {
+    if !capabilities.tmpfs_xattr {
+        return None;
+    }
+    match try_tmpfs_with_xattr(base_path) {
+        Ok(()) => {
+            info!(mode = "tmpfs", path = %base_path.display(), "storage initialized");
+            Some(StorageHandle { mode: StorageMode::Tmpfs, base_path: base_path.to_path_buf(), cleaned_up: false })
+        }
+        Err(e) => {
+            debug!(error = %e, "tmpfs with xattr failed");
+            let _ = do_umount(base_path);
+            None
+        }
+    }
+}
+
+fn try_mode_ext4(base_path: &Path) -> Option<StorageHandle> {
+    match try_ext4_storage(base_path) {
+        Ok(()) => {
+            info!(mode = "ext4", path = %base_path.display(), "storage initialized");
+            Some(StorageHandle { mode: StorageMode::Ext4, base_path: base_path.to_path_buf(), cleaned_up: false })
+        }
+        Err(e) => {
+            debug!(error = %e, "ext4 loopback failed");
+            None
+        }
+    }
 }
 
 /// Explicitly clean up storage. Preferred over relying on Drop.
@@ -156,19 +194,20 @@ fn cleanup_storage_inner(base_path: &Path, _mode: StorageMode) -> Result<()> {
 /// ME11: Generate random 12-char alphanumeric path under /mnt/.
 /// Falls back to /mnt/vendor/ if /mnt/ is not writable.
 fn generate_random_path() -> PathBuf {
-    let name = random_alphanum(RANDOM_PATH_LEN);
+    resolve_mount_base(&random_alphanum(RANDOM_PATH_LEN))
+}
 
-    let mnt = PathBuf::from("/mnt").join(&name);
+fn generate_fixed_path() -> PathBuf {
+    resolve_mount_base(FIXED_PATH_NAME)
+}
+
+fn resolve_mount_base(name: &str) -> PathBuf {
     if is_dir_writable("/mnt") {
-        return mnt;
+        return PathBuf::from("/mnt").join(name);
     }
-
-    let vendor = PathBuf::from("/mnt/vendor").join(&name);
     if is_dir_writable("/mnt/vendor") {
-        return vendor;
+        return PathBuf::from("/mnt/vendor").join(name);
     }
-
-    // Final fallback to /dev (always writable by root)
     PathBuf::from("/dev").join(name)
 }
 

@@ -126,6 +126,15 @@ export interface UnameSettings {
   version: string;
 }
 
+export type StorageMode = 'auto' | 'erofs' | 'tmpfs' | 'ext4';
+
+export interface MountSettings {
+  storage_mode: StorageMode;
+  overlay_preferred: boolean;
+  magic_mount_fallback: boolean;
+  random_mount_paths: boolean;
+}
+
 export interface Settings {
   theme: 'dark' | 'light' | 'auto' | 'amoled';
   accentColor: string;
@@ -135,6 +144,7 @@ export interface Settings {
   brene: BreneSettings;
   susfs: SusfsSettings;
   uname: UnameSettings;
+  mount: MountSettings;
 }
 
 export type Scenario = 'full' | 'susfs_frontend' | 'kernel_only' | 'susfs_only' | 'none';
