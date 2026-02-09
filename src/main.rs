@@ -23,7 +23,7 @@ fn read_version_from_prop() -> String {
     };
     for line in content.lines() {
         if let Some(v) = line.strip_prefix("version=") {
-            let v = v.trim();
+            let v = v.trim().strip_prefix('v').unwrap_or(v.trim());
             if !v.is_empty() {
                 return v.to_string();
             }
