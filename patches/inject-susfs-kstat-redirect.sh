@@ -223,6 +223,23 @@ void susfs_add_sus_kstat_redirect(void __user **user_info) {\
 \t\tSUSFS_LOGI("kstat_redirect: SAME_INODE ino=%lu '"'"'%s'"'"'\\n",\
 \t\t           virtual_ino, info.virtual_pathname);\
 \t}\
+\n#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)\
+\tSUSFS_LOGI("redirect: virtual: '"'"'%s'"'"', real: '"'"'%s'"'"', target_ino: '"'"'%lu'"'"', spoofed_ino: '"'"'%lu'"'"', spoofed_dev: '"'"'%lu'"'"', spoofed_nlink: '"'"'%u'"'"', spoofed_size: '"'"'%llu'"'"', spoofed_atime_tv_sec: '"'"'%ld'"'"', spoofed_mtime_tv_sec: '"'"'%ld'"'"', spoofed_ctime_tv_sec: '"'"'%ld'"'"', spoofed_atime_tv_nsec: '"'"'%ld'"'"', spoofed_mtime_tv_nsec: '"'"'%ld'"'"', spoofed_ctime_tv_nsec: '"'"'%ld'"'"', spoofed_blksize: '"'"'%lu'"'"', spoofed_blocks: '"'"'%llu'"'"', added to SUS_KSTAT_HLIST\\n",\
+\t\t\tinfo.virtual_pathname, info.real_pathname, new_entry->target_ino,\
+\t\t\tnew_entry->info.spoofed_ino, new_entry->info.spoofed_dev,\
+\t\t\tnew_entry->info.spoofed_nlink, new_entry->info.spoofed_size,\
+\t\t\tnew_entry->info.spoofed_atime_tv_sec, new_entry->info.spoofed_mtime_tv_sec, new_entry->info.spoofed_ctime_tv_sec,\
+\t\t\tnew_entry->info.spoofed_atime_tv_nsec, new_entry->info.spoofed_mtime_tv_nsec, new_entry->info.spoofed_ctime_tv_nsec,\
+\t\t\tnew_entry->info.spoofed_blksize, new_entry->info.spoofed_blocks);\
+#else\
+\tSUSFS_LOGI("redirect: virtual: '"'"'%s'"'"', real: '"'"'%s'"'"', target_ino: '"'"'%lu'"'"', spoofed_ino: '"'"'%lu'"'"', spoofed_dev: '"'"'%lu'"'"', spoofed_nlink: '"'"'%u'"'"', spoofed_size: '"'"'%u'"'"', spoofed_atime_tv_sec: '"'"'%ld'"'"', spoofed_mtime_tv_sec: '"'"'%ld'"'"', spoofed_ctime_tv_sec: '"'"'%ld'"'"', spoofed_atime_tv_nsec: '"'"'%ld'"'"', spoofed_mtime_tv_nsec: '"'"'%ld'"'"', spoofed_ctime_tv_nsec: '"'"'%ld'"'"', spoofed_blksize: '"'"'%lu'"'"', spoofed_blocks: '"'"'%llu'"'"', added to SUS_KSTAT_HLIST\\n",\
+\t\t\tinfo.virtual_pathname, info.real_pathname, new_entry->target_ino,\
+\t\t\tnew_entry->info.spoofed_ino, new_entry->info.spoofed_dev,\
+\t\t\tnew_entry->info.spoofed_nlink, new_entry->info.spoofed_size,\
+\t\t\tnew_entry->info.spoofed_atime_tv_sec, new_entry->info.spoofed_mtime_tv_sec, new_entry->info.spoofed_ctime_tv_sec,\
+\t\t\tnew_entry->info.spoofed_atime_tv_nsec, new_entry->info.spoofed_mtime_tv_nsec, new_entry->info.spoofed_ctime_tv_nsec,\
+\t\t\tnew_entry->info.spoofed_blksize, new_entry->info.spoofed_blocks);\
+#endif\
 \n\tinfo.err = 0;\
 out_copy_to_user:\
 \tif (copy_to_user(&((struct st_susfs_sus_kstat_redirect __user*)*user_info)->err, &info.err, sizeof(info.err))) {\
