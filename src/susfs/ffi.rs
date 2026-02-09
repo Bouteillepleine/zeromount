@@ -213,7 +213,7 @@ pub fn supercall(cmd: SusfsCommand, data: *mut u8) -> Result<i32, i32> {
         )
     };
     if ret < 0 {
-        Err(unsafe { *libc::__errno_location() })
+        Err(std::io::Error::last_os_error().raw_os_error().unwrap_or(-1))
     } else {
         Ok(ret as i32)
     }

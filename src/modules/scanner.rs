@@ -220,8 +220,8 @@ fn is_zero_char_device(path: &Path) -> bool {
         Ok(m) => {
             let dev = m.rdev();
             // major and minor are packed in rdev
-            let major = libc::major(dev);
-            let minor = libc::minor(dev);
+            let major = libc::major(dev as _);
+            let minor = libc::minor(dev as _);
             major == 0 && minor == 0
         }
         Err(_) => false,

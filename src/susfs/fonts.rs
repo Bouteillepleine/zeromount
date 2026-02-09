@@ -311,10 +311,10 @@ fn mount_font_overlay(module_font_dir: &Path, system_font_dir: &str) -> Result<u
     };
 
     if ret != 0 {
-        let errno = unsafe { *libc::__errno_location() };
+        let err = std::io::Error::last_os_error();
+        let errno = err.raw_os_error().unwrap_or(-1);
         bail!(
-            "overlay mount failed on {system_font_dir}: {} (errno {errno})",
-            std::io::Error::from_raw_os_error(errno)
+            "overlay mount failed on {system_font_dir}: {err} (errno {errno})"
         );
     }
 

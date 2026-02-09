@@ -97,9 +97,9 @@ const _: () = {
 
 /// Raw ioctl wrapper that returns the kernel's return value or an IoctlError.
 unsafe fn raw_ioctl(fd: i32, request: u32, arg: *mut libc::c_void) -> Result<i32, IoctlError> {
-    let ret = libc::ioctl(fd, request.into(), arg);
+    let ret = libc::ioctl(fd, request as libc::Ioctl, arg);
     if ret < 0 {
-        let errno = *libc::__errno_location();
+        let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(-1);
         Err(IoctlError::IoctlFailed {
             name: ioctl_name(request),
             msg: std::io::Error::from_raw_os_error(errno).to_string(),
