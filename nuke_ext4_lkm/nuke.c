@@ -51,6 +51,8 @@ static int __init nuke_entry(void)
     int err;
     char check[64] = {0};
 
+    pr_info("zeromount/nuke: init symaddr=0x%lx mount_point=%s\n", symaddr, mount_point);
+
     if (!mount_point[0]) {
         pr_info("zeromount/nuke: mount_point not provided\n");
         return -EAGAIN;
