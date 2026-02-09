@@ -12,11 +12,9 @@ esac
 BIN="$MODDIR/bin/${ABI}/zeromount"
 [ -x "$BIN" ] || exit 1
 
-# Bootloop protection: increment counter, reset on success
-COUNTER_FILE="/data/adb/zeromount/.bootcount"
-COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0)
-COUNT=$((COUNT + 1))
-echo "$COUNT" > "$COUNTER_FILE"
-[ "$COUNT" -gt 3 ] && { "$BIN" config restore; echo 0 > "$COUNTER_FILE"; }
+# Rust pipeline owns bootcount (increment + reset + threshold).
+# Shell fast-fail only: if already past threshold, don't even start.
+COUNT=$(cat /data/adb/zeromount/.bootcount 2>/dev/null || echo 0)
+[ "$COUNT" -ge 3 ] && exit 1
 
-"$BIN" mount && echo 0 > "$COUNTER_FILE"
+"$BIN" mount
