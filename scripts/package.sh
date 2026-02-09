@@ -74,8 +74,9 @@ for bin in "${BINARIES[@]}"; do
     fi
 done
 
-if [ "$FOUND_BINS" -eq 0 ]; then
-    echo "WARNING: no binaries found — ZIP will lack executables" >&2
+if [ "$FOUND_BINS" -ne 4 ]; then
+    echo "FATAL: found $FOUND_BINS/4 binaries (need all: zm-arm64 zm-arm zm-x86_64 zm-x86)" >&2
+    exit 1
 fi
 
 # -- WebUI --
@@ -89,7 +90,8 @@ fi
 if [ -n "$WEBROOT_SRC" ]; then
     cp -r "$WEBROOT_SRC" "$STAGING/webroot"
 else
-    echo "WARNING: webroot/ not found — ZIP will lack WebUI" >&2
+    echo "FATAL: webroot/ not found" >&2
+    exit 1
 fi
 
 # -- META-INF for recovery/KSU compatibility --
