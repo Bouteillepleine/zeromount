@@ -32,16 +32,17 @@ impl RootManager for KsuManager {
     }
 
     fn update_description(&self, text: &str) -> Result<()> {
-        // KSU05: KernelSU has override.description via ksud module config
+        // ksud module config requires a KSU execution context that doesn't
+        // exist when the binary runs standalone; fall back to module.prop edit
         let status = Command::new("ksud")
             .args(["module", "config", "set", "override.description", text])
-            .status()
-            .context("failed to exec ksud for override.description")?;
-        if !status.success() {
-            anyhow::bail!("ksud module config set override.description failed (exit {})",
-                status.code().unwrap_or(-1));
+            .status();
+
+        if status.map(|s| s.success()).unwrap_or(false) {
+            return Ok(());
         }
-        Ok(())
+
+        write_description_to_module_prop(text)
     }
 
     fn notify_module_mounted(&self) -> Result<()> {
@@ -82,25 +83,7 @@ impl RootManager for APatchManager {
     }
 
     fn update_description(&self, text: &str) -> Result<()> {
-        // KSU05: APatch has no override.description; edit module.prop directly
-        let prop_path = Path::new(ZEROMOUNT_MODULE_DIR).join("module.prop");
-        let content = std::fs::read_to_string(&prop_path)
-            .context("failed to read module.prop for description update")?;
-
-        let mut updated = String::with_capacity(content.len());
-        for line in content.lines() {
-            if line.starts_with("description=") {
-                updated.push_str("description=");
-                updated.push_str(text);
-            } else {
-                updated.push_str(line);
-            }
-            updated.push('\n');
-        }
-
-        std::fs::write(&prop_path, &updated)
-            .context("failed to write module.prop for description update")?;
-        Ok(())
+        write_description_to_module_prop(text)
     }
 
     fn notify_module_mounted(&self) -> Result<()> {
@@ -115,6 +98,29 @@ impl RootManager for APatchManager {
         }
         Ok(())
     }
+}
+
+// -- Shared --
+
+fn write_description_to_module_prop(text: &str) -> Result<()> {
+    let prop_path = Path::new(ZEROMOUNT_MODULE_DIR).join("module.prop");
+    let content = std::fs::read_to_string(&prop_path)
+        .context("failed to read module.prop for description update")?;
+
+    let mut updated = String::with_capacity(content.len());
+    for line in content.lines() {
+        if line.starts_with("description=") {
+            updated.push_str("description=");
+            updated.push_str(text);
+        } else {
+            updated.push_str(line);
+        }
+        updated.push('\n');
+    }
+
+    std::fs::write(&prop_path, &updated)
+        .context("failed to write module.prop for description update")?;
+    Ok(())
 }
 
 // -- Detection --

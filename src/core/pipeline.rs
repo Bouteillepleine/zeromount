@@ -352,12 +352,22 @@ impl MountController<Mounted> {
     }
 
     fn build_description_summary(&self) -> String {
-        let succeeded = self.state.results.iter().filter(|r| r.success).count();
-        let total = self.state.results.len();
-        let scenario = self.state.detection.scenario;
-        format!(
-            "ZeroMount [{scenario:?}] {succeeded}/{total} modules mounted",
-        )
+        let mounted: Vec<&str> = self
+            .state
+            .results
+            .iter()
+            .filter(|r| r.success)
+            .map(|r| r.module_id.as_str())
+            .collect();
+
+        if mounted.is_empty() {
+            return "😴 Idle — No Module Mounted | Mountless VFS-level Redirection. GHOST👻"
+                .to_string();
+        }
+
+        let label = if mounted.len() == 1 { "Module" } else { "Modules" };
+        let names = mounted.join(", ");
+        format!("✅ GHOST ⚡️ | {} {} | {}", mounted.len(), label, names)
     }
 
     fn build_runtime_state(&self) -> RuntimeState {
@@ -640,7 +650,67 @@ mod tests {
         };
 
         let desc = ctrl.build_description_summary();
-        assert_eq!(desc, "ZeroMount [Full] 1/2 modules mounted");
+        assert_eq!(desc, "✅ GHOST ⚡️ | 1 Module | a");
+    }
+
+    #[test]
+    fn description_idle_when_no_modules() {
+        let ctrl = MountController {
+            state: Mounted {
+                config: ZeroMountConfig::default(),
+                root_mgr: Box::new(TestRootManager),
+                detection: DetectionResult {
+                    scenario: Scenario::Full,
+                    capabilities: CapabilityFlags::default(),
+                    driver_version: Some(1),
+                    timestamp: 0,
+                },
+                results: Vec::new(),
+            },
+        };
+
+        let desc = ctrl.build_description_summary();
+        assert!(desc.contains("Idle"));
+        assert!(desc.contains("GHOST"));
+    }
+
+    #[test]
+    fn description_multiple_modules() {
+        let ctrl = MountController {
+            state: Mounted {
+                config: ZeroMountConfig::default(),
+                root_mgr: Box::new(TestRootManager),
+                detection: DetectionResult {
+                    scenario: Scenario::Full,
+                    capabilities: CapabilityFlags::default(),
+                    driver_version: Some(1),
+                    timestamp: 0,
+                },
+                results: vec![
+                    MountResult {
+                        module_id: "lsposed".into(),
+                        strategy_used: MountStrategy::Vfs,
+                        success: true,
+                        rules_applied: 10,
+                        rules_failed: 0,
+                        error: None,
+                        mount_paths: vec![],
+                    },
+                    MountResult {
+                        module_id: "shamiko".into(),
+                        strategy_used: MountStrategy::Vfs,
+                        success: true,
+                        rules_applied: 3,
+                        rules_failed: 0,
+                        error: None,
+                        mount_paths: vec![],
+                    },
+                ],
+            },
+        };
+
+        let desc = ctrl.build_description_summary();
+        assert_eq!(desc, "✅ GHOST ⚡️ | 2 Modules | lsposed, shamiko");
     }
 
     #[test]
