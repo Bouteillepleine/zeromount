@@ -3,10 +3,11 @@
 # KSU04: No manage.kernel_umount declaration (VFS mode has no mounts).
 SKIPUNZIP=1
 
-ui_print "- Installing ZeroMount v2.0.0"
-
 # Extract module files
 unzip -o "$ZIPFILE" -d "$MODPATH" >&2
+
+ZM_VERSION=$(grep '^version=' "$MODPATH/module.prop" | cut -d= -f2)
+ui_print "- Installing ZeroMount ${ZM_VERSION}"
 
 # Detect architecture and map to ABI directory
 case "$(uname -m)" in

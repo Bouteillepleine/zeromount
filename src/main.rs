@@ -13,7 +13,7 @@ use clap::Parser;
 
 use cli::{Cli, Commands};
 
-const VERSION: &str = "2.0.0";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MODULE_PROP_PATH: &str = "/data/adb/modules/zeromount/module.prop";
 
 fn read_version_from_prop() -> String {

@@ -3,7 +3,7 @@ pub mod handlers;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "zeromount", version = "2.0.0", about = "KernelSU/APatch metamodule mount engine")]
+#[command(name = "zeromount", version = env!("CARGO_PKG_VERSION"), about = "KernelSU/APatch metamodule mount engine")]
 pub struct Cli {
     /// Enable verbose logging (also triggered by .verbose file)
     #[arg(long, short, global = true)]

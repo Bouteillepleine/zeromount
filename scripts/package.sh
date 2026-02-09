@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Assemble ZeroMount module ZIP from CI artifacts or local build.
-# Usage: ./scripts/package.sh [--version v2.0.0] [--out zeromount-v2.0.0.zip]
+# Usage: ./scripts/package.sh [--version v2.0.0-dev] [--out zeromount-v2.0.0-dev.zip]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MODULE_DIR="$PROJECT_ROOT/module"
 
-VERSION="v2.0.0"
+# Read version from Cargo.toml as single source of truth
+VERSION="v$(grep '^version' "$PROJECT_ROOT/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')"
 OUT_NAME=""
 STAGING=""
 BUILD=false
