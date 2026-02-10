@@ -670,14 +670,15 @@ fn select_nuke_ko(_module_base: &Path) -> Option<PathBuf> {
         .collect::<Vec<_>>()
         .join(".");
 
-    // Find .ko files and pick the one matching our kernel version
+    // Suffix match prevents "5.1" from matching "nuke-android12-5.10.ko"
+    let suffix = format!("-{kernel_ver}.ko");
     let entries = fs::read_dir(&lkm_dir).ok()?;
     let mut best: Option<PathBuf> = None;
 
     for entry in entries.flatten() {
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
-        if name_str.ends_with(".ko") && name_str.contains(&kernel_ver) {
+        if name_str.ends_with(&suffix) {
             best = Some(entry.path());
             break;
         }
