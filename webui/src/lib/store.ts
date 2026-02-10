@@ -197,12 +197,15 @@ function createAppStore() {
   }
 
   // Toast notifications
-  const [toast, setToast] = createSignal<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [toast, setToast] = createSignal<{ message: string; type: 'success' | 'error' | 'info' | 'warning'; duration: number } | null>(null);
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Actions
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+  const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info', duration?: number) => {
+    if (toastTimer) clearTimeout(toastTimer);
+    const ms = duration || (type === 'warning' ? 4500 : 3000);
+    setToast({ message, type, duration: ms });
+    toastTimer = setTimeout(() => setToast(null), ms);
   };
 
   const loadInitialData = async () => {
@@ -714,7 +717,7 @@ function createAppStore() {
         api.configSet('mount.magic_mount_fallback', String(newMagic)),
       ]);
       await api.logActivity('MOUNT_STRATEGY_CHANGED', `Strategy → ${strategy}`);
-      showToast('Mount strategy changed — reboot to apply', 'info');
+      showToast('Mount strategy changed — reboot to apply', 'warning');
       console.log('[ZM-Store] setMountStrategy() saved:', strategy, '→ overlay_preferred:', newOverlay, 'magic_mount_fallback:', newMagic);
     } catch (e) {
       console.error('[ZM-Store] setMountStrategy() error:', e);

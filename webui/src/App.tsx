@@ -80,6 +80,7 @@ export function App() {
             <Toast
               message={toast().message}
               type={toast().type}
+              duration={toast().duration}
               visible={true}
             />
           )}
