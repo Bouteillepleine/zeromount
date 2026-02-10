@@ -9,12 +9,6 @@ export default defineConfig({
     outDir: '../module/webroot',
     emptyOutDir: true,
     minify: 'esbuild',
-    rollupOptions: {
-      external: ['kernelsu'],
-    },
-  },
-  optimizeDeps: {
-    exclude: ['kernelsu'],
   },
   server: {
     port: 5173,
