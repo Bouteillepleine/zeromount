@@ -351,23 +351,93 @@ fn build_dynamic_uname() -> Result<(String, String)> {
 }
 
 const SUSFS_PERSISTENT_CONFIG: &str = "/data/adb/susfs4ksu/config.sh";
+const SUSFS_CONFIG_DIR: &str = "/data/adb/susfs4ksu";
+
+const SUSFS_SHARED_KEYS: [(&str, fn(&crate::core::config::BreneConfig) -> bool); 5] = [
+    ("susfs_log", |b| b.susfs_log),
+    ("avc_log_spoofing", |b| b.avc_log_spoofing),
+    ("hide_sus_mnts_for_all_or_non_su_procs", |b| b.hide_sus_mounts),
+    ("emulate_vold_app_data", |b| b.emulate_vold_app_data),
+    ("force_hide_lsposed", |b| b.force_hide_lsposed),
+];
+
+fn parse_shell_bool(content: &str, key: &str) -> Option<bool> {
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some(val) = trimmed.strip_prefix(key).and_then(|rest| rest.strip_prefix('=')) {
+            // Strip inline comments and quotes: `1 # comment` -> `1`, `"1"` -> `1`
+            let clean = val.split('#').next().unwrap_or(val).trim().trim_matches('"');
+            return Some(clean == "1");
+        }
+    }
+    None
+}
+
+pub fn import_susfs_config(config: &mut ZeroMountConfig) -> Result<bool> {
+    let config_path = Path::new(SUSFS_PERSISTENT_CONFIG);
+    if !config_path.exists() {
+        return Ok(false);
+    }
+
+    let content = fs::read_to_string(config_path)
+        .context("reading SUSFS config.sh for import")?;
+
+    let mut changed = false;
+    let brene = &mut config.brene;
+
+    for &(shell_key, getter) in &SUSFS_SHARED_KEYS {
+        if let Some(file_val) = parse_shell_bool(&content, shell_key) {
+            let current = getter(brene);
+            if file_val != current {
+                match shell_key {
+                    "susfs_log" => brene.susfs_log = file_val,
+                    "avc_log_spoofing" => brene.avc_log_spoofing = file_val,
+                    "hide_sus_mnts_for_all_or_non_su_procs" => brene.hide_sus_mounts = file_val,
+                    "emulate_vold_app_data" => brene.emulate_vold_app_data = file_val,
+                    "force_hide_lsposed" => brene.force_hide_lsposed = file_val,
+                    _ => {}
+                }
+                info!("imported from SUSFS: {shell_key} = {file_val}");
+                changed = true;
+            }
+        }
+    }
+
+    if changed {
+        config.save(None)?;
+    }
+
+    Ok(changed)
+}
 
 // Sync our BRENE toggles to SUSFS config.sh so SUSFS boot scripts stay in sync
 pub fn sync_susfs_config(config: &ZeroMountConfig) -> Result<()> {
     let config_path = Path::new(SUSFS_PERSISTENT_CONFIG);
+    let brene = &config.brene;
+
     if !config_path.exists() {
-        debug!("SUSFS config.sh not found, skipping sync");
+        // SUSFS installed but config.sh missing — create it
+        if Path::new(SUSFS_CONFIG_DIR).is_dir() {
+            let mut content = String::new();
+            for &(key, getter) in &SUSFS_SHARED_KEYS {
+                let val = if getter(brene) { "1" } else { "0" };
+                content.push_str(&format!("{key}={val}\n"));
+            }
+            fs::write(config_path, &content).context("creating SUSFS config.sh")?;
+            info!("BRENE: created SUSFS config.sh with 5 settings");
+        } else {
+            debug!("SUSFS not installed, skipping config sync");
+        }
         return Ok(());
     }
 
-    let brene = &config.brene;
-    let pairs = [
-        ("susfs_log", brene.susfs_log),
-        ("avc_log_spoofing", brene.avc_log_spoofing),
-        ("hide_sus_mnts_for_all_or_non_su_procs", brene.hide_sus_mounts),
-        ("emulate_vold_app_data", brene.emulate_vold_app_data),
-        ("force_hide_lsposed", brene.force_hide_lsposed),
-    ];
+    let pairs: Vec<(&str, bool)> = SUSFS_SHARED_KEYS
+        .iter()
+        .map(|&(key, getter)| (key, getter(brene)))
+        .collect();
 
     let mut content = fs::read_to_string(config_path)
         .context("reading SUSFS config.sh")?;

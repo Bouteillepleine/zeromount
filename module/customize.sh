@@ -39,6 +39,17 @@ if [ ! -f "$ZM_DATA/config.toml" ]; then
     "$BIN" config defaults > "$ZM_DATA/config.toml" 2>/dev/null || true
 fi
 
+# Align SUSFS config with our defaults so both modules agree on first boot
+SUSFS_CONFIG="/data/adb/susfs4ksu/config.sh"
+if [ -f "$SUSFS_CONFIG" ]; then
+    ui_print "- Syncing SUSFS config"
+    sed -i 's/^susfs_log=.*/susfs_log=0/' "$SUSFS_CONFIG"
+    sed -i 's/^avc_log_spoofing=.*/avc_log_spoofing=1/' "$SUSFS_CONFIG"
+    sed -i 's/^hide_sus_mnts_for_all_or_non_su_procs=.*/hide_sus_mnts_for_all_or_non_su_procs=1/' "$SUSFS_CONFIG"
+    sed -i 's/^emulate_vold_app_data=.*/emulate_vold_app_data=1/' "$SUSFS_CONFIG"
+    sed -i 's/^force_hide_lsposed=.*/force_hide_lsposed=1/' "$SUSFS_CONFIG"
+fi
+
 ksud module config set manage.kernel_umount false 2>/dev/null || true
 
 echo 0 > "$ZM_DATA/.bootcount"
