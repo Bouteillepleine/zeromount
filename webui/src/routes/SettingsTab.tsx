@@ -5,7 +5,8 @@ import { Toggle } from '../components/core/Toggle';
 import { Input } from '../components/core/Input';
 import { Modal } from '../components/layout/Modal';
 import { store } from '../lib/store';
-import { GITHUB_URL } from '../lib/constants';
+import { GITHUB_URL, PATHS } from '../lib/constants';
+import { ksuExec } from '../lib/ksuApi';
 import type { BreneSettings, SusfsSettings, UnameMode, MountStrategy, StorageMode } from '../lib/types';
 import "./SettingsTab.css";
 
@@ -36,26 +37,39 @@ export function SettingsTab() {
     setShowClearConfirm(false);
   };
 
-  const copyDebugInfo = () => {
-    const info = `
-Zero-Mount
-Driver: ${store.systemInfo.driverVersion}
-Kernel: ${store.systemInfo.kernelVersion}
-SUSFS: ${store.systemInfo.susfsVersion}
-Active Rules: ${store.stats.activeRules}
-Excluded Apps: ${store.stats.excludedUids}
-Engine: ${store.engineActive() ? 'Active' : 'Inactive'}
-    `.trim();
+  const copyDebugInfo = async () => {
+    const info = [
+      'Zero-Mount',
+      `Driver: ${store.systemInfo.driverVersion}`,
+      `Kernel: ${store.systemInfo.kernelVersion}`,
+      `SUSFS: ${store.systemInfo.susfsVersion}`,
+      `Active Rules: ${store.stats.activeRules}`,
+      `Excluded Apps: ${store.stats.excludedUids}`,
+      `Engine: ${store.engineActive() ? 'Active' : 'Inactive'}`,
+      `Scenario: ${store.scenario()}`,
+      `Device: ${store.systemInfo.deviceModel}`,
+      `Android: ${store.systemInfo.androidVersion}`,
+      `SELinux: ${store.systemInfo.selinuxStatus}`,
+    ].join('\n');
 
-    navigator.clipboard.writeText(info).then(() => {
-      store.showToast('Debug info copied to clipboard', 'success');
-    });
+    const outPath = '/sdcard/zeromount-debug.txt';
+    try {
+      const { errno } = await ksuExec(`echo '${info.replace(/'/g, "'\\''")}' > ${outPath}`);
+      if (errno === 0) {
+        store.showToast(`Debug info saved to ${outPath}`, 'success');
+      } else {
+        store.showToast('Failed to write debug info', 'error');
+      }
+    } catch {
+      store.showToast('Failed to write debug info', 'error');
+    }
   };
 
   const isThemeActive = (themeName: string) => store.settings.theme === themeName;
 
   const caps = () => store.capabilities?.() || null;
   const susfsAvailable = () => caps()?.susfs_available ?? false;
+  const susfsEnabled = () => susfsAvailable() && store.settings.susfs.enabled;
 
   const handleBreneToggle = (key: keyof BreneSettings, value: boolean) => {
     store.setBreneToggle(key, value);
@@ -357,10 +371,8 @@ Engine: ${store.engineActive() ? 'Active' : 'Inactive'}
               </select>
             </div>
             <Show when={!['auto', 'KSU', 'overlay'].includes(store.settings.mount.overlay_source)}>
-              <div class="settings__item settings__item--sub">
-                <div class="settings__item-content">
-                  <div class="settings__item-label">Custom Source</div>
-                </div>
+              <div class="settings__item settings__item--sub settings__item--stacked">
+                <div class="settings__item-label">Custom Source</div>
                 <Input
                   value={store.settings.mount.overlay_source === 'custom' ? customOverlaySource() : store.settings.mount.overlay_source}
                   placeholder="e.g. my_overlay"
@@ -402,10 +414,8 @@ Engine: ${store.engineActive() ? 'Active' : 'Inactive'}
             </select>
           </div>
           <Show when={!['auto', 'tmpfs', 'none', 'shmem', 'shm'].includes(store.settings.mount.mount_source)}>
-            <div class="settings__item settings__item--sub">
-              <div class="settings__item-content">
-                <div class="settings__item-label">Custom Source</div>
-              </div>
+            <div class="settings__item settings__item--sub settings__item--stacked">
+              <div class="settings__item-label">Custom Source</div>
               <Input
                 value={store.settings.mount.mount_source === 'custom' ? customMountSource() : store.settings.mount.mount_source}
                 placeholder="e.g. my_source"
@@ -427,49 +437,49 @@ Engine: ${store.engineActive() ? 'Active' : 'Inactive'}
 
         <div class="settings__item">
           <div class="settings__item-content">
-            <div class="settings__item-label">SUSFS Available</div>
+            <div class="settings__item-label">SUSFS Integration</div>
             <div class="settings__item-desc">
               {susfsAvailable()
-                ? `Version ${caps()?.susfs_version || 'unknown'}`
+                ? `Version ${caps()?.susfs_version || 'unknown'} — ${susfsEnabled() ? 'active' : 'disabled'}`
                 : 'Not detected on this kernel'}
             </div>
           </div>
           <Toggle
-            checked={susfsAvailable()}
-            onChange={() => {}}
-            disabled
+            checked={susfsEnabled()}
+            onChange={(v) => handleSusfsToggle('enabled', v)}
+            disabled={!susfsAvailable()}
           />
         </div>
 
         <Show when={susfsAvailable()}>
           <div class="settings__sub-toggles">
-            <div class="settings__item settings__item--sub">
+            <div class={`settings__item settings__item--sub${!susfsEnabled() ? ' settings__item--disabled' : ''}`}>
               <div class="settings__item-content">
                 <div class="settings__item-label">Path Hiding</div>
                 <div class="settings__item-desc">Hide paths from detection apps</div>
               </div>
-              <Toggle checked={store.settings.susfs.path_hide} onChange={(v) => handleSusfsToggle('path_hide', v)} />
+              <Toggle checked={store.settings.susfs.path_hide} onChange={(v) => handleSusfsToggle('path_hide', v)} disabled={!susfsEnabled()} />
             </div>
-            <div class="settings__item settings__item--sub">
+            <div class={`settings__item settings__item--sub${!susfsEnabled() ? ' settings__item--disabled' : ''}`}>
               <div class="settings__item-content">
                 <div class="settings__item-label">Kstat Spoofing</div>
                 <div class="settings__item-desc">Spoof file metadata for redirected files</div>
               </div>
-              <Toggle checked={store.settings.susfs.kstat} onChange={(v) => handleSusfsToggle('kstat', v)} />
+              <Toggle checked={store.settings.susfs.kstat} onChange={(v) => handleSusfsToggle('kstat', v)} disabled={!susfsEnabled()} />
             </div>
-            <div class="settings__item settings__item--sub">
+            <div class={`settings__item settings__item--sub${!susfsEnabled() ? ' settings__item--disabled' : ''}`}>
               <div class="settings__item-content">
                 <div class="settings__item-label">Maps Hiding</div>
                 <div class="settings__item-desc">Hide module entries from /proc/maps</div>
               </div>
-              <Toggle checked={store.settings.susfs.maps_hide} onChange={(v) => handleSusfsToggle('maps_hide', v)} />
+              <Toggle checked={store.settings.susfs.maps_hide} onChange={(v) => handleSusfsToggle('maps_hide', v)} disabled={!susfsEnabled()} />
             </div>
-            <div class="settings__item settings__item--sub">
+            <div class={`settings__item settings__item--sub${!susfsEnabled() ? ' settings__item--disabled' : ''}`}>
               <div class="settings__item-content">
                 <div class="settings__item-label">Font Redirect</div>
                 <div class="settings__item-desc">Redirect font files via open_redirect</div>
               </div>
-              <Toggle checked={store.settings.susfs.open_redirect} onChange={(v) => handleSusfsToggle('open_redirect', v)} />
+              <Toggle checked={store.settings.susfs.open_redirect} onChange={(v) => handleSusfsToggle('open_redirect', v)} disabled={!susfsEnabled()} />
             </div>
           </div>
         </Show>
@@ -618,22 +628,16 @@ Engine: ${store.engineActive() ? 'Active' : 'Inactive'}
             </select>
           </div>
           <Show when={store.settings.uname.mode !== 'disabled'}>
-            <div class="settings__item settings__item--sub">
-              <div class="settings__item-content">
-                <div class="settings__item-label">Release</div>
-                <div class="settings__item-desc">e.g. 5.10.0-android12-gki</div>
-              </div>
+            <div class="settings__item settings__item--sub settings__item--stacked">
+              <div class="settings__item-label">Release</div>
               <Input
                 value={store.settings.uname.release}
-                placeholder="5.10.0-gki"
+                placeholder="5.10.0-android12-gki"
                 onBlur={(e) => store.setUnameField('release', e.currentTarget.value)}
               />
             </div>
-            <div class="settings__item settings__item--sub">
-              <div class="settings__item-content">
-                <div class="settings__item-label">Version</div>
-                <div class="settings__item-desc">e.g. #1 SMP PREEMPT</div>
-              </div>
+            <div class="settings__item settings__item--sub settings__item--stacked">
+              <div class="settings__item-label">Version</div>
               <Input
                 value={store.settings.uname.version}
                 placeholder="#1 SMP PREEMPT"
@@ -720,24 +724,46 @@ Engine: ${store.engineActive() ? 'Active' : 'Inactive'}
             <Button
               variant="secondary"
               size="small"
-              onClick={() => {
-                const config = {
-                  rules: store.rules(),
-                  excludedUids: store.excludedUids(),
-                  settings: store.settings,
-                  exportDate: new Date().toISOString(),
-                };
-                const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'zeromount-config.json';
-                a.click();
-                URL.revokeObjectURL(url);
-                store.showToast('Config exported', 'success');
+              onClick={async () => {
+                const outPath = '/sdcard/zeromount-config.toml';
+                try {
+                  const { errno } = await ksuExec(`cp /data/adb/zeromount/config.toml ${outPath}`);
+                  if (errno === 0) {
+                    store.showToast(`Config exported to ${outPath}`, 'success');
+                  } else {
+                    store.showToast('Failed to export config', 'error');
+                  }
+                } catch {
+                  store.showToast('Failed to export config', 'error');
+                }
               }}
             >
               Export Config
+            </Button>
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={async () => {
+                const srcPath = '/sdcard/zeromount-config.toml';
+                try {
+                  const { errno: checkErr } = await ksuExec(`test -f ${srcPath}`);
+                  if (checkErr !== 0) {
+                    store.showToast(`No config found at ${srcPath}`, 'error');
+                    return;
+                  }
+                  const { errno } = await ksuExec(`cp ${srcPath} /data/adb/zeromount/config.toml`);
+                  if (errno !== 0) {
+                    store.showToast('Failed to import config', 'error');
+                    return;
+                  }
+                  await store.loadInitialData();
+                  store.showToast('Config imported — reload complete', 'success');
+                } catch {
+                  store.showToast('Failed to import config', 'error');
+                }
+              }}
+            >
+              Import Config
             </Button>
           </div>
 

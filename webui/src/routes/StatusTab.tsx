@@ -254,10 +254,11 @@ export function StatusTab() {
             </div>
 
             <Button
+              variant={store.engineActive() ? 'primary' : 'secondary'}
               size="large"
               onClick={() => store.toggleEngine()}
               loading={store.loading.engine}
-              style={`min-width: 200px; ${!store.engineActive() ? 'opacity: 0.8; filter: grayscale(20%);' : ''}`}
+              style="min-width: 200px;"
             >
               {store.engineActive() ? 'DISABLE ENGINE' : 'ENABLE ENGINE'}
             </Button>

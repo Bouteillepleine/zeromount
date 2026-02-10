@@ -88,6 +88,7 @@ function createAppStore() {
   };
 
   const defaultSusfs: SusfsSettings = {
+    enabled: true,
     path_hide: true,
     kstat: true,
     maps_hide: true,
@@ -237,6 +238,7 @@ function createAppStore() {
       // Config-dependent loads use dump when available, fall back to individual calls
       await Promise.allSettled([
         loadBreneSettings(dump),
+        loadSusfsSettings(dump),
         loadMountSettings(dump),
         loadVerboseState(dump),
       ]);
@@ -428,6 +430,7 @@ function createAppStore() {
       'auto_hide_rooted_folders', 'auto_hide_recovery', 'auto_hide_tmp',
       'auto_hide_sdcard_data', 'avc_log_spoofing', 'susfs_log',
       'hide_sus_mounts', 'emulate_vold_app_data', 'force_hide_lsposed',
+      'prop_spoofing',
     ];
 
     if (dump?.brene && dump?.uname) {
@@ -576,6 +579,32 @@ function createAppStore() {
       showToast(`Failed to save uname ${field}`, 'error');
       setSettings('uname', field, prev);
     }
+  };
+
+  const loadSusfsSettings = async (dump?: Record<string, any> | null) => {
+    if (dump?.susfs) {
+      const s = dump.susfs;
+      const susfs: Partial<SusfsSettings> = {};
+      for (const key of ['enabled', 'path_hide', 'kstat', 'maps_hide', 'open_redirect'] as (keyof SusfsSettings)[]) {
+        if (key in s) {
+          const v = s[key];
+          susfs[key] = typeof v === 'boolean' ? v : String(v) === 'true';
+        }
+      }
+      setSettings('susfs', prev => ({ ...prev, ...susfs }));
+      return;
+    }
+
+    const keys: (keyof SusfsSettings)[] = ['enabled', 'path_hide', 'kstat', 'maps_hide', 'open_redirect'];
+    const results = await Promise.allSettled(keys.map(k => api.configGet(`susfs.${k}`)));
+    const susfs: Partial<SusfsSettings> = {};
+    keys.forEach((key, i) => {
+      const r = results[i];
+      if (r.status === 'fulfilled' && r.value !== null) {
+        susfs[key] = r.value === 'true';
+      }
+    });
+    setSettings('susfs', prev => ({ ...prev, ...susfs }));
   };
 
   const loadMountSettings = async (dump?: Record<string, any> | null) => {

@@ -116,6 +116,7 @@ export interface BreneSettings {
 }
 
 export interface SusfsSettings {
+  enabled: boolean;
   path_hide: boolean;
   kstat: boolean;
   maps_hide: boolean;

@@ -167,6 +167,8 @@ pub struct BreneConfig {
     #[serde(default = "default_true")]
     pub force_hide_lsposed: bool,
     #[serde(default)]
+    pub prop_spoofing: bool,
+    #[serde(default)]
     pub custom_sus_paths: Vec<String>,
     #[serde(default)]
     pub custom_sus_maps: Vec<String>,
@@ -189,6 +191,7 @@ impl Default for BreneConfig {
             hide_sus_mounts: true,
             emulate_vold_app_data: true,
             force_hide_lsposed: true,
+            prop_spoofing: false,
             custom_sus_paths: Vec::new(),
             custom_sus_maps: Vec::new(),
             custom_sus_path_loops: Vec::new(),
@@ -424,6 +427,7 @@ impl ZeroMountConfig {
             "brene.hide_sus_mounts" => Some(self.brene.hide_sus_mounts.to_string()),
             "brene.emulate_vold_app_data" => Some(self.brene.emulate_vold_app_data.to_string()),
             "brene.force_hide_lsposed" => Some(self.brene.force_hide_lsposed.to_string()),
+            "brene.prop_spoofing" => Some(self.brene.prop_spoofing.to_string()),
             "brene.custom_sus_paths" => Some(self.brene.custom_sus_paths.join(",")),
             "brene.custom_sus_maps" => Some(self.brene.custom_sus_maps.join(",")),
             "brene.custom_sus_path_loops" => Some(self.brene.custom_sus_path_loops.join(",")),
@@ -478,6 +482,7 @@ impl ZeroMountConfig {
             "brene.hide_sus_mounts" => self.brene.hide_sus_mounts = value.parse()?,
             "brene.emulate_vold_app_data" => self.brene.emulate_vold_app_data = value.parse()?,
             "brene.force_hide_lsposed" => self.brene.force_hide_lsposed = value.parse()?,
+            "brene.prop_spoofing" => self.brene.prop_spoofing = value.parse()?,
             "brene.custom_sus_paths" => self.brene.custom_sus_paths = parse_csv(value),
             "brene.custom_sus_maps" => self.brene.custom_sus_maps = parse_csv(value),
             "brene.custom_sus_path_loops" => self.brene.custom_sus_path_loops = parse_csv(value),
