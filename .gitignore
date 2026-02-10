@@ -47,6 +47,10 @@ target/
 susfs4ksu-new/
 zeromount/
 
+# Release artifacts
+release/
+*.zip
+
 # Compiled binaries (built via CI)
 module/bin/*/zeromount
 module/bin/*/aapt

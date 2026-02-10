@@ -1,36 +1,36 @@
 #!/usr/bin/env bash
-# Assemble ZeroMount module ZIP from CI artifacts or local build.
-# Usage: ./scripts/package.sh [--version v2.0.0-dev] [--out zeromount-v2.0.0-dev.zip]
+# Full build pipeline: cross-compile Rust (debug + release), build WebUI, package module ZIPs.
+# Usage: ./scripts/package.sh --build [--version v2.0.0-dev] [--clean]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MODULE_DIR="$PROJECT_ROOT/module"
+WEBUI_DIR="$PROJECT_ROOT/webui"
+RELEASE_DIR="$PROJECT_ROOT/release"
 
-# Read version from Cargo.toml as single source of truth
 VERSION="v$(grep '^version' "$PROJECT_ROOT/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')"
-OUT_NAME=""
-STAGING=""
 BUILD=false
+CLEAN=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --version) VERSION="$2"; shift 2 ;;
-        --out)     OUT_NAME="$2"; shift 2 ;;
         --build)   BUILD=true; shift ;;
+        --clean)   CLEAN=true; shift ;;
         *)         echo "Unknown arg: $1"; exit 1 ;;
     esac
 done
 
-[ -z "$OUT_NAME" ] && OUT_NAME="zeromount-${VERSION}.zip"
+mkdir -p "$RELEASE_DIR/debug" "$RELEASE_DIR/release"
 
-STAGING="$(mktemp -d)"
-trap 'rm -rf "$STAGING"' EXIT
+if [ "$CLEAN" = true ]; then
+    echo "==> Cleaning old releases"
+    rm -f "$RELEASE_DIR"/debug/zeromount-*.zip "$RELEASE_DIR"/release/zeromount-*.zip
+fi
 
-echo "==> Assembling ZeroMount $VERSION"
-
-# -- Shell scripts --
 SCRIPTS=(
+    common.sh
     post-fs-data.sh
     metamount.sh
     service.sh
@@ -40,29 +40,6 @@ SCRIPTS=(
     customize.sh
 )
 
-for script in "${SCRIPTS[@]}"; do
-    src="$MODULE_DIR/$script"
-    if [ ! -f "$src" ]; then
-        echo "FATAL: missing $script" >&2
-        exit 1
-    fi
-    cp "$src" "$STAGING/$script"
-done
-
-# -- module.prop --
-if [ ! -f "$MODULE_DIR/module.prop" ]; then
-    echo "FATAL: missing module.prop" >&2
-    exit 1
-fi
-cp "$MODULE_DIR/module.prop" "$STAGING/module.prop"
-
-# Patch version into module.prop if --version was given
-sed -i "s/^version=.*/version=${VERSION}/" "$STAGING/module.prop"
-VERSION_CODE="${VERSION#v}"
-VERSION_CODE="${VERSION_CODE//.}"
-sed -i "s/^versionCode=.*/versionCode=${VERSION_CODE}/" "$STAGING/module.prop"
-
-# -- Cross-compile Rust binaries (optional) --
 declare -A ABI_TARGET=(
     [arm64-v8a]=aarch64-linux-android
     [armeabi-v7a]=armv7-linux-androideabi
@@ -70,14 +47,12 @@ declare -A ABI_TARGET=(
     [x86]=i686-linux-android
 )
 
-if [ "$BUILD" = true ]; then
+setup_toolchain() {
     NDK_BIN="/opt/android-ndk-r25b/toolchains/llvm/prebuilt/linux-x86_64/bin"
     if [ ! -d "$NDK_BIN" ]; then
         echo "FATAL: Android NDK not found at /opt/android-ndk-r25b" >&2
         exit 1
     fi
-
-    # Use president's rustup if available, fall back to system cargo
     if [ -f "/home/president/.cargo/bin/cargo" ]; then
         export RUSTUP_HOME=/home/president/.rustup
         export CARGO_HOME=/home/president/.cargo
@@ -86,77 +61,116 @@ if [ "$BUILD" = true ]; then
         CARGO="cargo"
     fi
     export PATH="$NDK_BIN:$PATH"
+}
+
+# Build Rust for one profile across all ABIs
+build_rust() {
+    local profile="$1"
+    local cargo_flag=""
+    local target_subdir="debug"
+
+    if [ "$profile" = "release" ]; then
+        cargo_flag="--release"
+        target_subdir="release"
+    fi
 
     for abi in "${!ABI_TARGET[@]}"; do
         target="${ABI_TARGET[$abi]}"
-        echo "==> Building $abi ($target)"
+        echo "==> [$profile] Building $abi ($target)"
         "$CARGO" build --manifest-path "$PROJECT_ROOT/Cargo.toml" \
-            --target "$target" --release 2>&1
-        mkdir -p "$MODULE_DIR/bin/$abi"
-        cp "$PROJECT_ROOT/target/$target/release/zeromount" "$MODULE_DIR/bin/$abi/zeromount"
+            --target "$target" $cargo_flag 2>&1
     done
-    echo "==> All targets built"
-fi
+    echo "==> [$profile] All Rust targets built"
+}
 
-# -- Collect binaries into staging --
-declare -A ABI_MAP=(
-    [arm64-v8a]=zm-arm64
-    [armeabi-v7a]=zm-arm
-    [x86_64]=zm-x86_64
-    [x86]=zm-x86
-)
-FOUND_BINS=0
+# Package one ZIP from a given Rust profile
+package_zip() {
+    local profile="$1"
+    local target_subdir="debug"
+    [ "$profile" = "release" ] && target_subdir="release"
 
-for abi in "${!ABI_MAP[@]}"; do
-    old_name="${ABI_MAP[$abi]}"
-    mkdir -p "$STAGING/bin/$abi"
+    local suffix=""
+    [ "$profile" = "debug" ] && suffix="-debug"
 
-    if [ -f "$MODULE_DIR/bin/$abi/zeromount" ]; then
-        cp "$MODULE_DIR/bin/$abi/zeromount" "$STAGING/bin/$abi/zeromount"
-        FOUND_BINS=$((FOUND_BINS + 1))
-    elif [ -f "$PROJECT_ROOT/target/${ABI_TARGET[$abi]}/release/zeromount" ]; then
-        cp "$PROJECT_ROOT/target/${ABI_TARGET[$abi]}/release/zeromount" "$STAGING/bin/$abi/zeromount"
-        FOUND_BINS=$((FOUND_BINS + 1))
-    elif [ -f "$PROJECT_ROOT/staging/$old_name/$old_name" ]; then
-        cp "$PROJECT_ROOT/staging/$old_name/$old_name" "$STAGING/bin/$abi/zeromount"
-        FOUND_BINS=$((FOUND_BINS + 1))
+    local out_name="zeromount-${VERSION}${suffix}.zip"
+    local out_path="$RELEASE_DIR/$profile/$out_name"
+    local staging
+    staging="$(mktemp -d)"
+
+    echo ""
+    echo "==> Packaging $profile: $out_name"
+
+    for script in "${SCRIPTS[@]}"; do
+        local src="$MODULE_DIR/$script"
+        if [ ! -f "$src" ]; then
+            echo "FATAL: missing $script" >&2
+            rm -rf "$staging"
+            exit 1
+        fi
+        cp "$src" "$staging/$script"
+    done
+
+    if [ ! -f "$MODULE_DIR/module.prop" ]; then
+        echo "FATAL: missing module.prop" >&2
+        rm -rf "$staging"
+        exit 1
+    fi
+    cp "$MODULE_DIR/module.prop" "$staging/module.prop"
+
+    sed -i "s/^version=.*/version=${VERSION}/" "$staging/module.prop"
+    local vcode="${VERSION#v}"
+    vcode="${vcode//.}"
+    sed -i "s/^versionCode=.*/versionCode=${vcode}/" "$staging/module.prop"
+
+    local found_bins=0
+    for abi in "${!ABI_TARGET[@]}"; do
+        local target="${ABI_TARGET[$abi]}"
+        local bin_src="$PROJECT_ROOT/target/$target/$target_subdir/zeromount"
+        mkdir -p "$staging/bin/$abi"
+
+        if [ -f "$bin_src" ]; then
+            cp "$bin_src" "$staging/bin/$abi/zeromount"
+            found_bins=$((found_bins + 1))
+        elif [ -f "$MODULE_DIR/bin/$abi/zeromount" ]; then
+            cp "$MODULE_DIR/bin/$abi/zeromount" "$staging/bin/$abi/zeromount"
+            found_bins=$((found_bins + 1))
+        fi
+
+        if [ -f "$MODULE_DIR/bin/$abi/aapt" ]; then
+            cp "$MODULE_DIR/bin/$abi/aapt" "$staging/bin/$abi/aapt"
+        fi
+    done
+
+    if [ "$found_bins" -ne 4 ]; then
+        echo "FATAL: [$profile] found $found_bins/4 binaries" >&2
+        rm -rf "$staging"
+        exit 1
     fi
 
-    if [ -f "$MODULE_DIR/bin/$abi/aapt" ]; then
-        cp "$MODULE_DIR/bin/$abi/aapt" "$STAGING/bin/$abi/aapt"
+    # WebUI
+    local webroot_src=""
+    if [ -d "$MODULE_DIR/webroot" ]; then
+        webroot_src="$MODULE_DIR/webroot"
+    elif [ -d "$PROJECT_ROOT/staging/webroot" ]; then
+        webroot_src="$PROJECT_ROOT/staging/webroot"
     fi
-done
+    if [ -n "$webroot_src" ]; then
+        cp -r "$webroot_src" "$staging/webroot"
+    else
+        echo "FATAL: webroot/ not found" >&2
+        rm -rf "$staging"
+        exit 1
+    fi
 
-if [ "$FOUND_BINS" -ne 4 ]; then
-    echo "FATAL: found $FOUND_BINS/4 zeromount binaries (need all 4 ABIs)" >&2
-    exit 1
-fi
+    # LKM
+    if [ -d "$MODULE_DIR/lkm" ] && ls "$MODULE_DIR/lkm"/*.ko >/dev/null 2>&1; then
+        mkdir -p "$staging/lkm"
+        cp "$MODULE_DIR/lkm"/*.ko "$staging/lkm/"
+    fi
 
-# -- WebUI --
-WEBROOT_SRC=""
-if [ -d "$MODULE_DIR/webroot" ]; then
-    WEBROOT_SRC="$MODULE_DIR/webroot"
-elif [ -d "$PROJECT_ROOT/staging/webroot" ]; then
-    WEBROOT_SRC="$PROJECT_ROOT/staging/webroot"
-fi
-
-if [ -n "$WEBROOT_SRC" ]; then
-    cp -r "$WEBROOT_SRC" "$STAGING/webroot"
-else
-    echo "FATAL: webroot/ not found" >&2
-    exit 1
-fi
-
-# -- LKM (nuke_ext4) --
-if [ -d "$MODULE_DIR/lkm" ] && ls "$MODULE_DIR/lkm"/*.ko >/dev/null 2>&1; then
-    mkdir -p "$STAGING/lkm"
-    cp "$MODULE_DIR/lkm"/*.ko "$STAGING/lkm/"
-    echo "    LKM: $(ls "$MODULE_DIR/lkm"/*.ko | wc -l) kernel modules"
-fi
-
-# -- META-INF for recovery/KSU compatibility --
-mkdir -p "$STAGING/META-INF/com/google/android"
-cat > "$STAGING/META-INF/com/google/android/update-binary" << 'UPDATER'
+    # META-INF
+    mkdir -p "$staging/META-INF/com/google/android"
+    cat > "$staging/META-INF/com/google/android/update-binary" << 'UPDATER'
 #!/sbin/sh
 
 OUTFD=/proc/self/fd/$2
@@ -164,8 +178,6 @@ ZIPFILE="$3"
 
 ui_print() { echo -e "ui_print $1\nui_print" >> $OUTFD; }
 
-# KernelSU and APatch handle installation natively.
-# This update-binary provides TWRP recovery fallback.
 MODPATH="${MODPATH:-/data/adb/modules/meta-zeromount}"
 mkdir -p "$MODPATH"
 unzip -o "$ZIPFILE" -d "$MODPATH" >&2
@@ -173,33 +185,58 @@ chmod 755 "$MODPATH"/*.sh "$MODPATH"/bin/*/zeromount 2>/dev/null || true
 ui_print "ZeroMount installed via recovery"
 exit 0
 UPDATER
+    echo "" > "$staging/META-INF/com/google/android/updater-script"
 
-echo "" > "$STAGING/META-INF/com/google/android/updater-script"
+    # Verify no eliminated scripts
+    local eliminated=(logging.sh susfs_integration.sh sync.sh zm-diag.sh)
+    for dead in "${eliminated[@]}"; do
+        if [ -f "$staging/$dead" ]; then
+            echo "FATAL: eliminated script $dead in staging!" >&2
+            rm -rf "$staging"
+            exit 1
+        fi
+    done
 
-# -- Verify eliminated scripts are ABSENT --
-ELIMINATED=(logging.sh susfs_integration.sh sync.sh zm-diag.sh)
-for dead in "${ELIMINATED[@]}"; do
-    if [ -f "$STAGING/$dead" ]; then
-        echo "FATAL: eliminated script $dead found in staging!" >&2
-        exit 1
+    rm -f "$out_path"
+    (cd "$staging" && zip -r9 "$out_path" .)
+    rm -rf "$staging"
+
+    # Summary
+    local lkm_count=0
+    if [ -d "$MODULE_DIR/lkm" ]; then
+        lkm_count=$(ls "$MODULE_DIR/lkm"/*.ko 2>/dev/null | wc -l)
     fi
-done
 
-# -- Build ZIP --
-case "$OUT_NAME" in
-    /*) OUT_PATH="$OUT_NAME" ;;
-    *)  OUT_PATH="$PROJECT_ROOT/$OUT_NAME" ;;
-esac
-rm -f "$OUT_PATH"
-(cd "$STAGING" && zip -r9 "$OUT_PATH" .)
+    echo "    Output:  $out_path"
+    echo "    Size:    $(du -h "$out_path" | cut -f1)"
+    echo "    Bins:    $found_bins/4"
+    echo "    WebUI:   present"
+    echo "    LKM:     $lkm_count kernel modules"
+}
 
-echo "==> Built: $OUT_PATH"
-echo "==> Contents:"
-unzip -l "$OUT_PATH" | tail -n +4 | head -n -2
+# -- Main --
+echo "==> ZeroMount $VERSION build pipeline"
+echo ""
+
+if [ "$BUILD" = true ]; then
+    setup_toolchain
+
+    build_rust "debug"
+    build_rust "release"
+
+    if [ -f "$WEBUI_DIR/package.json" ]; then
+        echo "==> Building WebUI"
+        (cd "$WEBUI_DIR" && pnpm install --frozen-lockfile && pnpm run build)
+        echo "==> WebUI built"
+    else
+        echo "WARN: webui/package.json not found, skipping WebUI build" >&2
+    fi
+fi
+
+package_zip "debug"
+package_zip "release"
 
 echo ""
-echo "==> Verification:"
-echo "    Binaries: $FOUND_BINS/4 (bin/<abi>/zeromount)"
-echo "    WebUI: $([ -d "$STAGING/webroot" ] && echo "present" || echo "MISSING")"
-echo "    LKM: $([ -d "$STAGING/lkm" ] && ls "$STAGING/lkm"/*.ko 2>/dev/null | wc -l || echo "0") kernel modules"
-echo "    Eliminated scripts: verified absent"
+echo "==> Build complete"
+echo "    Debug:   $RELEASE_DIR/debug/zeromount-${VERSION}-debug.zip"
+echo "    Release: $RELEASE_DIR/release/zeromount-${VERSION}.zip"
