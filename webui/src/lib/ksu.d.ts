@@ -1,35 +1,22 @@
-interface KsuPackageInfo {
-  packageName: string;
-  appLabel: string;
-  versionName?: string;
-  versionCode?: number;
-  uid?: number;
-  targetSdkVersion?: number;
-  isSystemApp?: boolean;
-}
-
-interface KsuPackageIcon {
-  packageName: string;
-  icon: string;
-}
-
-interface KsuNativeApi {
+interface KsuNativeBridge {
   exec(cmd: string, options: string, callbackName: string): void;
-
-  listAllPackages?(): string;
-  listUserPackages?(): string;
-  listSystemPackages?(): string;
-  getPackagesInfo?(packageNamesJson: string): string;
-  getPackagesIcons?(packageNamesJson: string, size: number): string;
+  spawn(cmd: string, argsJson: string, optionsJson: string, callbackName: string): void;
+  fullScreen(isFullScreen: boolean): void;
+  enableEdgeToEdge(enable: boolean): void;
+  toast(msg: string): void;
+  moduleInfo(): string;
+  listPackages(type: string): string;
+  getPackagesInfo(packagesJson: string): string;
+  exit(): void;
 }
 
 declare global {
-  var ksu: KsuNativeApi | undefined;
+  var ksu: KsuNativeBridge | undefined;
 
   interface Window {
-    [key: `ksu_api_cb_${string}`]: ((errno: number, stdout: string, stderr: string) => void) | undefined;
-    [key: `exec_cb_${string}`]: ((errno: number, stdout: string, stderr: string) => void) | undefined;
+    [key: `exec_callback_${string}`]: ((...args: any[]) => void) | undefined;
+    [key: `spawn_callback_${string}`]: any;
   }
 }
 
-export type { KsuNativeApi, KsuPackageInfo, KsuPackageIcon };
+export type { KsuNativeBridge };

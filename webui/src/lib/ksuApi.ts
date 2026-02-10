@@ -1,4 +1,6 @@
-import type { KsuPackageInfo, KsuPackageIcon } from './ksu.d.ts';
+import type { PackagesInfo } from 'kernelsu';
+import { listPackages as ksuListPackages, getPackagesInfo as ksuGetPackagesInfo } from 'kernelsu';
+export { spawn } from 'kernelsu';
 
 interface KsuExecResult {
   errno: number;
@@ -10,31 +12,11 @@ let execCounter = 0;
 
 const VALID_PACKAGE_PATTERN = /^[a-zA-Z][a-zA-Z0-9_.]*$/;
 
-function isKsuPackageInfo(obj: unknown): obj is KsuPackageInfo {
-  return (
-    typeof obj === 'object' &&
-    obj !== null &&
-    'packageName' in obj &&
-    typeof (obj as KsuPackageInfo).packageName === 'string'
-  );
-}
-
-function isKsuPackageIcon(obj: unknown): obj is KsuPackageIcon {
-  return (
-    typeof obj === 'object' &&
-    obj !== null &&
-    'packageName' in obj &&
-    'icon' in obj &&
-    typeof (obj as KsuPackageIcon).packageName === 'string' &&
-    typeof (obj as KsuPackageIcon).icon === 'string'
-  );
-}
-
 function isValidPackageName(name: string): boolean {
   return VALID_PACKAGE_PATTERN.test(name) && name.length <= 256;
 }
 
-async function ksuExec(cmd: string, timeoutMs = 30000): Promise<KsuExecResult> {
+export async function ksuExec(cmd: string, timeoutMs = 30000): Promise<KsuExecResult> {
   const ksu = globalThis.ksu;
   if (!ksu?.exec) {
     return { errno: -1, stdout: '', stderr: 'KSU not available' };
@@ -65,18 +47,10 @@ async function ksuExec(cmd: string, timeoutMs = 30000): Promise<KsuExecResult> {
 }
 
 export async function listPackages(type: 'all' | 'user' | 'system'): Promise<string[]> {
-  const ksu = globalThis.ksu;
-
-  const methodMap = { all: 'listAllPackages', user: 'listUserPackages', system: 'listSystemPackages' } as const;
-  const methodName = methodMap[type];
-
-  if (ksu?.[methodName]) {
+  if (globalThis.ksu?.listPackages) {
     try {
-      const result = (ksu[methodName] as () => string)();
-      if (result) {
-        const parsed = JSON.parse(result);
-        if (Array.isArray(parsed)) return parsed;
-      }
+      const result = ksuListPackages(type);
+      if (Array.isArray(result) && result.length > 0) return result;
     } catch { /* fallback */ }
   }
 
@@ -85,32 +59,23 @@ export async function listPackages(type: 'all' | 'user' | 'system'): Promise<str
   if (errno === 0 && stdout.trim()) {
     return stdout.trim().split('\n').filter(Boolean);
   }
-
   return [];
 }
 
-export async function getPackagesInfo(packageNames: string[]): Promise<KsuPackageInfo[]> {
+export async function getPackagesInfo(packageNames: string[]): Promise<PackagesInfo[]> {
   if (!packageNames.length) return [];
 
-  const ksu = globalThis.ksu;
-
-  if (ksu?.getPackagesInfo) {
+  if (globalThis.ksu?.getPackagesInfo) {
     try {
-      const result = ksu.getPackagesInfo(JSON.stringify(packageNames));
-      if (result) {
-        const parsed: unknown = JSON.parse(result);
-        if (Array.isArray(parsed) && parsed.every(isKsuPackageInfo)) {
-          return parsed;
-        }
-      }
+      const result = ksuGetPackagesInfo(packageNames);
+      if (Array.isArray(result) && result.length > 0) return result;
     } catch { /* fallback */ }
   }
 
-  // Full shell fallback only when KSU API unavailable
-  const results: KsuPackageInfo[] = [];
+  const results: PackagesInfo[] = [];
   for (const packageName of packageNames) {
     if (!isValidPackageName(packageName)) {
-      results.push({ packageName, appLabel: packageName });
+      results.push({ packageName, appLabel: packageName, versionName: '', versionCode: 0, isSystem: false, uid: -1 });
       continue;
     }
     const { stdout, errno } = await ksuExec(
@@ -119,6 +84,10 @@ export async function getPackagesInfo(packageNames: string[]): Promise<KsuPackag
     results.push({
       packageName,
       appLabel: errno === 0 && stdout.trim() ? stdout.trim() : packageName,
+      versionName: '',
+      versionCode: 0,
+      isSystem: false,
+      uid: -1,
     });
   }
   return results;
@@ -131,31 +100,4 @@ export async function getAppLabelViaAapt(packageName: string): Promise<string | 
     `pm path ${packageName} 2>/dev/null | head -1 | sed 's/package://' | xargs -I{} aapt dump badging {} 2>/dev/null | grep "application-label:" | head -1 | sed "s/application-label:'\\(.*\\)'/\\1/"`
   );
   return errno === 0 && stdout.trim() ? stdout.trim() : null;
-}
-
-export async function getPackagesIcons(
-  packageNames: string[],
-  size = 100
-): Promise<KsuPackageIcon[]> {
-  if (!packageNames.length) return [];
-
-  const ksu = globalThis.ksu;
-
-  if (ksu?.getPackagesIcons) {
-    try {
-      const result = ksu.getPackagesIcons(JSON.stringify(packageNames), size);
-      if (result) {
-        const parsed: unknown = JSON.parse(result);
-        if (Array.isArray(parsed) && parsed.every(isKsuPackageIcon)) {
-          return parsed;
-        }
-      }
-    } catch { /* fallback */ }
-  }
-
-  // No shell fallback for icons - native API required
-  return packageNames.map((packageName) => ({
-    packageName,
-    icon: '',
-  }));
 }

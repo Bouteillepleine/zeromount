@@ -1,5 +1,5 @@
 import type { VfsRule, ExcludedUid, SystemInfo, ActivityItem, EngineStats, InstalledApp, KsuModule, RuntimeStatus } from './types';
-import type { KsuNativeApi } from './ksu.d.ts';
+import { ksuExec } from './ksuApi';
 import { PATHS, APP_VERSION } from './constants';
 // Lazy-load mock module only in dev. The import() is behind import.meta.env.DEV
 // so Vite replaces it with `false` in prod and never emits the api.mock chunk.
@@ -9,52 +9,12 @@ async function getMock() {
   return _mockModule!.MockAPI;
 }
 
-interface KsuExecResult {
-  errno: number;
-  stdout: string;
-  stderr: string;
-}
-
 function escapeShellArg(arg: string): string {
   return "'" + arg.replace(/'/g, "'\\''") + "'";
 }
 
-// KSU exec with proper callback pattern
-let execCounter = 0;
-
 export function shouldUseMock(): boolean {
   return import.meta.env.DEV && typeof globalThis.ksu === 'undefined';
-}
-
-async function execCommand(cmd: string, timeoutMs = 30000): Promise<KsuExecResult> {
-  const ksu = globalThis.ksu;
-  if (!ksu?.exec) {
-    console.error('[ZM-API] execCommand() FAILED: KSU not available');
-    throw new Error('KSU not available');
-  }
-
-  return new Promise((resolve, reject) => {
-    const callbackName = `exec_cb_${Date.now()}_${execCounter++}`;
-
-    const timeoutId = setTimeout(() => {
-      delete (window as any)[callbackName];
-      reject(new Error(`Command timed out: ${cmd.substring(0, 50)}...`));
-    }, timeoutMs);
-
-    (window as any)[callbackName] = (errno: number, stdout: string, stderr: string) => {
-      clearTimeout(timeoutId);
-      delete (window as any)[callbackName];
-      resolve({ errno, stdout, stderr });
-    };
-
-    try {
-      ksu.exec(cmd, '{}', callbackName);
-    } catch (e) {
-      clearTimeout(timeoutId);
-      delete (window as any)[callbackName];
-      reject(e);
-    }
-  });
 }
 
 
@@ -100,7 +60,7 @@ function withMetaLock<T>(fn: () => Promise<T>): Promise<T> {
 async function parseExclusionFiles(): Promise<ExcludedUid[]> {
   console.log('[ZM-API] parseExclusionFiles() called');
   try {
-    const { errno: listErr, stdout: listOut } = await execCommand(`cat "${PATHS.EXCLUSION_FILE}"`);
+    const { errno: listErr, stdout: listOut } = await ksuExec(`cat "${PATHS.EXCLUSION_FILE}"`);
     console.log('[ZM-API] parseExclusionFiles() list result:', { errno: listErr, stdout: listOut?.slice(0, 100) });
     if (listErr !== 0 || !listOut.trim()) {
       console.log('[ZM-API] parseExclusionFiles() no exclusions found');
@@ -112,7 +72,7 @@ async function parseExclusionFiles(): Promise<ExcludedUid[]> {
 
     let meta: ExclusionMeta = {};
     try {
-      const { errno: metaErr, stdout: metaOut } = await execCommand(`cat "${PATHS.EXCLUSION_META}"`);
+      const { errno: metaErr, stdout: metaOut } = await ksuExec(`cat "${PATHS.EXCLUSION_META}"`);
       console.log('[ZM-API] parseExclusionFiles() meta result:', { errno: metaErr, stdout: metaOut?.slice(0, 100) });
       if (metaErr === 0 && metaOut.trim()) {
         meta = JSON.parse(metaOut);
@@ -143,7 +103,7 @@ async function parseExclusionFiles(): Promise<ExcludedUid[]> {
 async function parseActivityLog(): Promise<ActivityItem[]> {
   console.log('[ZM-API] parseActivityLog() called');
   try {
-    const { errno, stdout } = await execCommand(`tail -50 "${PATHS.ACTIVITY_LOG}"`);
+    const { errno, stdout } = await ksuExec(`tail -50 "${PATHS.ACTIVITY_LOG}"`);
     console.log('[ZM-API] parseActivityLog() result:', { errno, stdout: stdout?.slice(0, 100) });
     if (errno !== 0 || !stdout.trim()) {
       console.log('[ZM-API] parseActivityLog() no activity found');
@@ -184,7 +144,7 @@ async function logActivity(type: string, message: string): Promise<void> {
   try {
     const timestamp = new Date().toISOString();
     const line = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
-    await execCommand(`echo ${escapeShellArg(line)} >> "${PATHS.ACTIVITY_LOG}"`);
+    await ksuExec(`echo ${escapeShellArg(line)} >> "${PATHS.ACTIVITY_LOG}"`);
   } catch (e) {
     console.error('[ZM-API] logActivity() error:', e);
   }
@@ -197,7 +157,7 @@ export const api = {
       return (await getMock()).getVersion();
     }
     try {
-      const { errno, stdout } = await execCommand(`${PATHS.BINARY} version`);
+      const { errno, stdout } = await ksuExec(`${PATHS.BINARY} version`);
       if (errno === 0 && stdout) {
         console.log('[ZM-API] getVersion() returning:', stdout.trim());
         return stdout.trim();
@@ -230,13 +190,13 @@ export const api = {
     try {
       console.log('[ZM-API] getSystemInfo() fetching system info...');
       const [verRes, kernRes, uptimeRes, modelRes, androidRes, selinuxRes, susfsRes] = await Promise.all([
-        execCommand(`${PATHS.BINARY} version`).catch(() => ({ errno: 1, stdout: '', stderr: '' })),
-        execCommand('uname -r').catch(() => ({ errno: 1, stdout: '', stderr: '' })),
-        execCommand('cat /proc/uptime').catch(() => ({ errno: 1, stdout: '', stderr: '' })),
-        execCommand('getprop ro.product.model').catch(() => ({ errno: 1, stdout: '', stderr: '' })),
-        execCommand('getprop ro.build.version.release').catch(() => ({ errno: 1, stdout: '', stderr: '' })),
-        execCommand('getenforce').catch(() => ({ errno: 1, stdout: '', stderr: '' })),
-        execCommand('ksu_susfs show version 2>/dev/null || echo ""').catch(() => ({ errno: 1, stdout: '', stderr: '' })),
+        ksuExec(`${PATHS.BINARY} version`).catch(() => ({ errno: 1, stdout: '', stderr: '' })),
+        ksuExec('uname -r').catch(() => ({ errno: 1, stdout: '', stderr: '' })),
+        ksuExec('cat /proc/uptime').catch(() => ({ errno: 1, stdout: '', stderr: '' })),
+        ksuExec('getprop ro.product.model').catch(() => ({ errno: 1, stdout: '', stderr: '' })),
+        ksuExec('getprop ro.build.version.release').catch(() => ({ errno: 1, stdout: '', stderr: '' })),
+        ksuExec('getenforce').catch(() => ({ errno: 1, stdout: '', stderr: '' })),
+        ksuExec('ksu_susfs show version 2>/dev/null || echo ""').catch(() => ({ errno: 1, stdout: '', stderr: '' })),
       ]);
 
       if (verRes.errno === 0 && verRes.stdout) {
@@ -273,13 +233,65 @@ export const api = {
     return info;
   },
 
+  async getSystemInfoBatched(): Promise<SystemInfo> {
+    if (shouldUseMock()) {
+      return (await getMock()).getSystemInfo();
+    }
+
+    const info: SystemInfo = {
+      driverVersion: `v${APP_VERSION}`,
+      kernelVersion: '-',
+      susfsVersion: '-',
+      uptime: '-',
+      deviceModel: '-',
+      androidVersion: '-',
+      selinuxStatus: '-',
+    };
+
+    try {
+      const { errno, stdout } = await ksuExec(
+        [
+          `${PATHS.BINARY} version 2>/dev/null || echo ''`,
+          'uname -r',
+          'cat /proc/uptime',
+          'getprop ro.product.model',
+          'getprop ro.build.version.release',
+          'getenforce 2>/dev/null || echo Permissive',
+          "ksu_susfs show version 2>/dev/null || echo ''",
+        ].map(c => `echo "$(${c})"`).join(' && echo "---DELIM---" && ')
+      );
+
+      if (errno === 0 && stdout) {
+        const parts = stdout.split('---DELIM---').map(s => s.trim());
+        if (parts[0]) info.driverVersion = parts[0];
+        if (parts[1]) info.kernelVersion = parts[1];
+        if (parts[2]) {
+          const seconds = parseInt(parts[2].split(' ')[0], 10);
+          if (!isNaN(seconds)) {
+            const hours = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            info.uptime = `${hours}h ${mins}m`;
+          }
+        }
+        if (parts[3]) info.deviceModel = parts[3];
+        if (parts[4]) info.androidVersion = parts[4];
+        if (parts[5]) info.selinuxStatus = parts[5];
+        if (parts[6]) info.susfsVersion = parts[6];
+      }
+    } catch (e) {
+      console.error('[ZM-API] getSystemInfoBatched() error:', e);
+    }
+
+    return info;
+  },
+
   async getRules(): Promise<VfsRule[]> {
     console.log('[ZM-API] getRules() called, mock:', shouldUseMock());
     if (shouldUseMock()) {
       return (await getMock()).getRules();
     }
     try {
-      const { errno, stdout } = await execCommand(`${PATHS.BINARY} vfs list`);
+      const { errno, stdout } = await ksuExec(`${PATHS.BINARY} vfs list`);
       if (errno === 0 && stdout.trim()) {
         const rules = parseRulesOutput(stdout);
         console.log('[ZM-API] getRules() returning', rules.length, 'rules');
@@ -302,7 +314,7 @@ export const api = {
 
     const cmd = `${PATHS.BINARY} vfs clear`;
     console.log('[ZM-API] clearAllRules() executing:', cmd);
-    const { errno, stderr } = await execCommand(cmd);
+    const { errno, stderr } = await ksuExec(cmd);
     if (errno !== 0) {
       console.error('[ZM-API] clearAllRules() failed:', { errno, stderr });
       throw new Error(stderr || 'Failed to clear rules');
@@ -332,7 +344,7 @@ export const api = {
 
     const cmd = `${PATHS.BINARY} uid block ${escapeShellArg(String(uid))}`;
     console.log('[ZM-API] excludeUid() executing:', cmd);
-    const { errno, stderr } = await execCommand(cmd);
+    const { errno, stderr } = await ksuExec(cmd);
     if (errno !== 0) {
       console.error('[ZM-API] excludeUid() failed:', { errno, stderr });
       throw new Error(stderr || 'Failed to exclude UID');
@@ -340,12 +352,12 @@ export const api = {
 
     console.log('[ZM-API] excludeUid() success');
 
-    await execCommand(`echo ${escapeShellArg(String(uid))} >> "${PATHS.EXCLUSION_FILE}"`).catch(e => console.error('[ZM-API] Exclusion persistence failed:', e));
+    await ksuExec(`echo ${escapeShellArg(String(uid))} >> "${PATHS.EXCLUSION_FILE}"`).catch(e => console.error('[ZM-API] Exclusion persistence failed:', e));
 
     await withMetaLock(async () => {
       try {
         let meta: Record<string, { packageName: string; appName: string; excludedAt: string }> = {};
-        const { errno: metaErr, stdout: metaOut } = await execCommand(`cat "${PATHS.EXCLUSION_META}" 2>/dev/null`);
+        const { errno: metaErr, stdout: metaOut } = await ksuExec(`cat "${PATHS.EXCLUSION_META}" 2>/dev/null`);
         if (metaErr === 0 && metaOut.trim()) {
           try {
             meta = JSON.parse(metaOut);
@@ -355,7 +367,7 @@ export const api = {
           }
         }
         meta[String(uid)] = { packageName, appName, excludedAt: new Date().toISOString() };
-        await execCommand(`echo ${escapeShellArg(JSON.stringify(meta))} > "${PATHS.EXCLUSION_META}"`);
+        await ksuExec(`echo ${escapeShellArg(JSON.stringify(meta))} > "${PATHS.EXCLUSION_META}"`);
       } catch (e) {
         console.error('[ZM-API] Metadata save failed:', e);
       }
@@ -378,23 +390,24 @@ export const api = {
 
     const cmd = `${PATHS.BINARY} uid unblock ${escapeShellArg(String(uid))}`;
     console.log('[ZM-API] includeUid() executing:', cmd);
-    const { errno, stderr } = await execCommand(cmd);
+    const { errno, stderr } = await ksuExec(cmd);
     if (errno !== 0) {
       console.error('[ZM-API] includeUid() failed:', { errno, stderr });
       throw new Error(stderr || 'Failed to include UID');
     }
     console.log('[ZM-API] includeUid() success');
 
-    await execCommand(`sed -i '/^${uid}$/d' "${PATHS.EXCLUSION_FILE}"`).catch(e => console.error('[ZM-API] Exclusion removal failed:', e));
+    if (!/^\d+$/.test(String(uid))) throw new Error('invalid uid');
+    await ksuExec(`sed -i '/^${uid}$/d' "${PATHS.EXCLUSION_FILE}"`).catch(e => console.error('[ZM-API] Exclusion removal failed:', e));
 
     await withMetaLock(async () => {
       try {
-        const { errno: metaErr, stdout: metaOut } = await execCommand(`cat "${PATHS.EXCLUSION_META}" 2>/dev/null`);
+        const { errno: metaErr, stdout: metaOut } = await ksuExec(`cat "${PATHS.EXCLUSION_META}" 2>/dev/null`);
         if (metaErr === 0 && metaOut.trim()) {
           try {
             const meta = JSON.parse(metaOut);
             delete meta[String(uid)];
-            await execCommand(`echo ${escapeShellArg(JSON.stringify(meta))} > "${PATHS.EXCLUSION_META}"`);
+            await ksuExec(`echo ${escapeShellArg(JSON.stringify(meta))} > "${PATHS.EXCLUSION_META}"`);
           } catch (parseErr) {
             console.error('[ZM-API] Metadata parse error during cleanup:', parseErr);
           }
@@ -445,7 +458,7 @@ export const api = {
 
     const cmd = enable ? `${PATHS.BINARY} vfs enable` : `${PATHS.BINARY} vfs disable`;
     console.log('[ZM-API] toggleEngine() executing:', cmd);
-    const { errno, stderr } = await execCommand(cmd);
+    const { errno, stderr } = await ksuExec(cmd);
     if (errno !== 0) {
       console.error('[ZM-API] toggleEngine() failed:', { errno, stderr });
       throw new Error(stderr || 'Failed to toggle engine');
@@ -461,7 +474,7 @@ export const api = {
 
     const subcmd = enabled ? 'enable' : 'disable';
     const cmd = `${PATHS.BINARY} log ${subcmd}`;
-    const { errno, stderr } = await execCommand(cmd);
+    const { errno, stderr } = await ksuExec(cmd);
     if (errno !== 0) {
       throw new Error(stderr || 'Failed to set verbose logging');
     }
@@ -473,7 +486,7 @@ export const api = {
     }
 
     const cmd = `${PATHS.BINARY} config get logging.verbose`;
-    const { errno, stdout } = await execCommand(cmd);
+    const { errno, stdout } = await ksuExec(cmd);
     if (errno !== 0) {
       return false;
     }
@@ -552,13 +565,21 @@ for dir in /data/adb/modules/*/; do
 done
 echo "]"
 `;
-      const { errno, stdout } = await execCommand(script);
+      const { errno, stdout } = await ksuExec(script);
       if (errno !== 0) {
         console.log('[ZM-API] scanKsuModules() script failed');
         return [];
       }
 
-      const modules = JSON.parse(stdout.trim()) as KsuModule[];
+      // Filesystem corruption can produce duplicate directory entries (same path).
+      // Dedup by path to avoid showing the same module twice.
+      const raw = JSON.parse(stdout.trim()) as KsuModule[];
+      const seen = new Set<string>();
+      const modules = raw.filter(m => {
+        if (seen.has(m.path)) return false;
+        seen.add(m.path);
+        return true;
+      });
       console.log('[ZM-API] scanKsuModules() returning', modules.length, 'modules');
       return modules;
     } catch (e) {
@@ -574,7 +595,7 @@ echo "]"
     }
 
     try {
-      const { stdout } = await execCommand(
+      const { stdout } = await ksuExec(
         `find ${escapeShellArg(modulePath)} -type f \\( -path "*/system/*" -o -path "*/vendor/*" -o -path "*/product/*" \\) 2>/dev/null`
       );
       const files = stdout.trim().split('\n').filter(Boolean);
@@ -595,7 +616,7 @@ echo "]"
         }
 
         const cmd = `${PATHS.BINARY} vfs add ${escapeShellArg(targetPath)} ${escapeShellArg(filePath)}`;
-        const { errno } = await execCommand(cmd);
+        const { errno } = await ksuExec(cmd);
         if (errno === 0) addedCount++;
       }
 
@@ -621,7 +642,7 @@ echo "]"
 
       for (const rule of moduleRules) {
         const cmd = `${PATHS.BINARY} vfs del ${escapeShellArg(rule.target)}`;
-        const { errno } = await execCommand(cmd);
+        const { errno } = await ksuExec(cmd);
         if (errno === 0) removedCount++;
       }
 
@@ -640,7 +661,7 @@ echo "]"
       return (await getMock()).fetchSystemColor();
     }
     try {
-      const { errno, stdout } = await execCommand(
+      const { errno, stdout } = await ksuExec(
         'settings get secure theme_customization_overlay_packages'
       );
       if (errno !== 0 || !stdout.trim()) {
@@ -666,7 +687,7 @@ echo "]"
       return (await getMock()).getRuntimeStatus();
     }
     try {
-      const { errno, stdout } = await execCommand(`${PATHS.BINARY} status --json`, 5000);
+      const { errno, stdout } = await ksuExec(`${PATHS.BINARY} status --json`, 5000);
       if (errno === 0 && stdout.trim()) {
         return JSON.parse(stdout.trim()) as RuntimeStatus;
       }
@@ -676,12 +697,25 @@ echo "]"
     return null;
   },
 
+  async configDump(): Promise<Record<string, any> | null> {
+    if (shouldUseMock()) return null;
+    try {
+      const { errno, stdout } = await ksuExec(`${PATHS.BINARY} config dump --json`);
+      if (errno === 0 && stdout.trim()) {
+        return JSON.parse(stdout.trim());
+      }
+    } catch (e) {
+      console.error('[ZM-API] configDump() error:', e);
+    }
+    return null;
+  },
+
   async configGet(key: string): Promise<string | null> {
     if (shouldUseMock()) {
       return (await getMock()).configGet(key);
     }
     try {
-      const { errno, stdout } = await execCommand(
+      const { errno, stdout } = await ksuExec(
         `${PATHS.BINARY} config get ${escapeShellArg(key)}`
       );
       if (errno === 0 && stdout.trim()) {
@@ -697,7 +731,7 @@ echo "]"
     if (shouldUseMock()) {
       return (await getMock()).configSet(key, value);
     }
-    const { errno, stderr } = await execCommand(
+    const { errno, stderr } = await ksuExec(
       `${PATHS.BINARY} config set ${escapeShellArg(key)} ${escapeShellArg(value)}`
     );
     if (errno !== 0) {
@@ -710,7 +744,7 @@ echo "]"
       console.log(`[ZM-API] mock: ksu_susfs enable_avc_log_spoofing ${enabled ? 1 : 0}`);
       return;
     }
-    await execCommand(`ksu_susfs enable_avc_log_spoofing ${enabled ? 1 : 0}`);
+    await ksuExec(`ksu_susfs enable_avc_log_spoofing ${enabled ? 1 : 0}`);
   },
 
   async logActivity(type: string, message: string): Promise<void> {
@@ -719,28 +753,28 @@ echo "]"
 
   async setSusfsLog(enabled: boolean): Promise<void> {
     if (shouldUseMock()) return;
-    await execCommand(`ksu_susfs enable_log ${enabled ? 1 : 0}`);
+    await ksuExec(`ksu_susfs enable_log ${enabled ? 1 : 0}`);
   },
 
   async setSusfsHideMounts(enabled: boolean): Promise<void> {
     if (shouldUseMock()) return;
     // v2.0.0+ uses hide_sus_mnts_for_all_procs, fallback to non_su_procs
-    const { errno } = await execCommand(`ksu_susfs hide_sus_mnts_for_all_procs ${enabled ? 1 : 0}`);
+    const { errno } = await ksuExec(`ksu_susfs hide_sus_mnts_for_all_procs ${enabled ? 1 : 0}`);
     if (errno !== 0) {
-      await execCommand(`ksu_susfs hide_sus_mnts_for_non_su_procs ${enabled ? 1 : 0}`);
+      await ksuExec(`ksu_susfs hide_sus_mnts_for_non_su_procs ${enabled ? 1 : 0}`);
     }
   },
 
   async writeSusfsConfigVar(key: string, value: string): Promise<void> {
     if (shouldUseMock()) return;
     const configPath = '/data/adb/susfs4ksu/config.sh';
-    await execCommand(`sed -i 's/^${escapeShellArg(key)}=.*/${escapeShellArg(key)}=${escapeShellArg(value)}/' ${escapeShellArg(configPath)}`);
+    await ksuExec(`sed -i 's/^${escapeShellArg(key)}=.*/${escapeShellArg(key)}=${escapeShellArg(value)}/' ${escapeShellArg(configPath)}`);
   },
 
   async readSusfsConfigVar(key: string): Promise<string | null> {
     if (shouldUseMock()) return null;
     try {
-      const { errno, stdout } = await execCommand(
+      const { errno, stdout } = await ksuExec(
         `grep -m1 '^${escapeShellArg(key)}=' /data/adb/susfs4ksu/config.sh | cut -d= -f2`
       );
       if (errno === 0 && stdout.trim()) return stdout.trim();

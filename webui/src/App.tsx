@@ -12,6 +12,7 @@ export function App() {
   const [isReady, setIsReady] = createSignal(false);
 
   onMount(async () => {
+    globalThis.ksu?.enableEdgeToEdge?.(true);
     await store.loadInitialData();
     setIsReady(true);
   });

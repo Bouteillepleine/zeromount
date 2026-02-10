@@ -216,12 +216,10 @@ function createAppStore() {
         api.getRules(),
         api.getExcludedUids(),
         api.getActivity(),
-        api.getSystemInfo(),
+        api.getSystemInfoBatched(),
         api.scanKsuModules(),
-        loadBreneSettings(),
+        api.configDump(),
         settings.autoAccentColor ? api.fetchSystemColor() : Promise.resolve(null),
-        loadMountSettings(),
-        loadVerboseState(),
       ]);
 
       const status = results[0].status === 'fulfilled' ? results[0].value : null;
@@ -230,10 +228,18 @@ function createAppStore() {
       const activityData = results[3].status === 'fulfilled' ? results[3].value : [];
       const sysInfo = results[4].status === 'fulfilled' ? results[4].value : { driverVersion: '', kernelVersion: '', susfsVersion: '', uptime: '', deviceModel: '', androidVersion: '', selinuxStatus: '' };
       const ksuModulesData = results[5].status === 'fulfilled' ? results[5].value : [];
+      const dump = results[6].status === 'fulfilled' ? results[6].value : null;
       const systemColor = results[7].status === 'fulfilled' ? results[7].value : null;
 
+      // Config-dependent loads use dump when available, fall back to individual calls
+      await Promise.allSettled([
+        loadBreneSettings(dump),
+        loadMountSettings(dump),
+        loadVerboseState(dump),
+      ]);
+
       // Surface first rejected read so UI can show degraded state
-      const labels = ['status', 'rules', 'uids', 'activity', 'sysInfo', 'modules', 'brene', 'color', 'mount', 'verbose'];
+      const labels = ['status', 'rules', 'uids', 'activity', 'sysInfo', 'modules', 'configDump', 'color'];
       const firstFail = results.findIndex(r => r.status === 'rejected');
       if (firstFail !== -1) {
         setLastApiError({ operation: `loadInitialData:${labels[firstFail]}`, error: (results[firstFail] as PromiseRejectedResult).reason, timestamp: new Date() });
@@ -413,13 +419,33 @@ function createAppStore() {
     }
   };
 
-  const loadBreneSettings = async () => {
+  const loadBreneSettings = async (dump?: Record<string, any> | null) => {
     const breneKeys: (keyof BreneSettings)[] = [
       'auto_hide_apk', 'auto_hide_zygisk', 'auto_hide_fonts',
       'auto_hide_rooted_folders', 'auto_hide_recovery', 'auto_hide_tmp',
       'auto_hide_sdcard_data', 'avc_log_spoofing', 'susfs_log',
       'hide_sus_mounts', 'emulate_vold_app_data', 'force_hide_lsposed',
     ];
+
+    if (dump?.brene && dump?.uname) {
+      const brene: Partial<BreneSettings> = {};
+      for (const key of breneKeys) {
+        if (key in dump.brene) {
+          const v = dump.brene[key];
+          brene[key] = typeof v === 'boolean' ? v : String(v) === 'true';
+        }
+      }
+      setSettings('brene', prev => ({ ...prev, ...brene }));
+
+      const uname: Partial<UnameSettings> = {};
+      if (dump.uname.mode != null) uname.mode = dump.uname.mode as UnameMode;
+      if (dump.uname.release != null) uname.release = String(dump.uname.release);
+      if (dump.uname.version != null) uname.version = String(dump.uname.version);
+      setSettings('uname', prev => ({ ...prev, ...uname }));
+      return;
+    }
+
+    // Fallback: individual configGet calls
     const results = await Promise.allSettled([
       ...breneKeys.map(k => api.configGet(`brene.${k}`)),
       api.configGet('uname.mode'),
@@ -549,14 +575,32 @@ function createAppStore() {
     }
   };
 
-  const loadMountSettings = async () => {
+  const loadMountSettings = async (dump?: Record<string, any> | null) => {
     console.log('[ZM-Store] loadMountSettings() starting...');
+
+    if (dump?.mount) {
+      const m = dump.mount;
+      const mount: Partial<MountSettings> = {};
+      if (m.storage_mode != null) mount.storage_mode = m.storage_mode as StorageMode;
+      if (m.overlay_preferred != null) mount.overlay_preferred = typeof m.overlay_preferred === 'boolean' ? m.overlay_preferred : String(m.overlay_preferred) === 'true';
+      if (m.magic_mount_fallback != null) mount.magic_mount_fallback = typeof m.magic_mount_fallback === 'boolean' ? m.magic_mount_fallback : String(m.magic_mount_fallback) === 'true';
+      if (m.random_mount_paths != null) mount.random_mount_paths = typeof m.random_mount_paths === 'boolean' ? m.random_mount_paths : String(m.random_mount_paths) === 'true';
+      if (m.mount_source != null) mount.mount_source = String(m.mount_source);
+      if (m.overlay_source != null) mount.overlay_source = String(m.overlay_source);
+      setSettings('mount', prev => ({ ...prev, ...mount }));
+      console.log('[ZM-Store] loadMountSettings() loaded from dump:', mount);
+      return;
+    }
+
+    // Fallback: individual configGet calls — all in a single Promise.allSettled
     const boolKeys: (keyof MountSettings)[] = [
       'overlay_preferred', 'magic_mount_fallback', 'random_mount_paths',
     ];
     const results = await Promise.allSettled([
       api.configGet('mount.storage_mode'),
       ...boolKeys.map(k => api.configGet(`mount.${k}`)),
+      api.configGet('mount.mount_source'),
+      api.configGet('mount.overlay_source'),
     ]);
     const mount: Partial<MountSettings> = {};
     if (results[0].status === 'fulfilled' && results[0].value !== null) {
@@ -568,21 +612,25 @@ function createAppStore() {
         (mount as any)[key] = r.value === 'true';
       }
     });
+    const mountSourceResult = results[boolKeys.length + 1];
+    const overlaySourceResult = results[boolKeys.length + 2];
+    if (mountSourceResult.status === 'fulfilled' && mountSourceResult.value !== null) {
+      mount.mount_source = mountSourceResult.value;
+    }
+    if (overlaySourceResult.status === 'fulfilled' && overlaySourceResult.value !== null) {
+      mount.overlay_source = overlaySourceResult.value;
+    }
     setSettings('mount', prev => ({ ...prev, ...mount }));
-    const [mountSource, overlaySource] = await Promise.all([
-      api.configGet('mount.mount_source'),
-      api.configGet('mount.overlay_source'),
-    ]);
-    if (mountSource !== null) {
-      setSettings('mount', 'mount_source', mountSource);
-    }
-    if (overlaySource !== null) {
-      setSettings('mount', 'overlay_source', overlaySource);
-    }
     console.log('[ZM-Store] loadMountSettings() loaded:', mount);
   };
 
-  const loadVerboseState = async () => {
+  const loadVerboseState = async (dump?: Record<string, any> | null) => {
+    if (dump?.logging && 'verbose' in dump.logging) {
+      const v = dump.logging.verbose;
+      setSettings({ verboseLogging: typeof v === 'boolean' ? v : String(v) === 'true' });
+      return;
+    }
+    // Fallback: individual call
     try {
       const verbose = await api.getVerboseLogging();
       setSettings({ verboseLogging: verbose });
@@ -737,7 +785,7 @@ function createAppStore() {
       packageName: info.packageName,
       appName: info.appLabel || info.packageName,
       uid: info.uid ?? -1,
-      isSystemApp: info.isSystemApp ?? systemSet.has(info.packageName),
+      isSystemApp: info.isSystem ?? systemSet.has(info.packageName),
     }));
   };
 

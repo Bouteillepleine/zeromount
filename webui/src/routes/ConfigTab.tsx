@@ -28,21 +28,13 @@ const loadIcon = (packageName: string, imgEl: HTMLImageElement) => {
     return;
   }
 
-  if (typeof globalThis.ksu !== 'undefined' && typeof globalThis.ksu.getPackagesIcons === 'function') {
-    try {
-      const result = globalThis.ksu.getPackagesIcons(JSON.stringify([packageName]), 100);
-      if (result) {
-        const parsed = JSON.parse(result);
-        if (parsed?.[0]?.icon) {
-          iconCache.set(packageName, parsed[0].icon);
-          imgEl.src = parsed[0].icon;
-          imgEl.style.opacity = '1';
-          return;
-        }
-      }
-    } catch (e) {
-      console.error('[ZM] Icon error:', packageName, e);
-    }
+  if (typeof globalThis.ksu !== 'undefined') {
+    const url = `ksu://icon/${packageName}`;
+    iconCache.set(packageName, url);
+    imgEl.src = url;
+    imgEl.style.opacity = '1';
+    imgEl.onerror = () => showFallback();
+    return;
   }
   showFallback();
 };

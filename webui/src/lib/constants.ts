@@ -1,5 +1,15 @@
+import { moduleInfo } from 'kernelsu';
+
+const MODULE_ID = (() => {
+  try {
+    const id = moduleInfo();
+    if (id && /^[a-zA-Z][a-zA-Z0-9._-]+$/.test(id)) return id;
+  } catch {}
+  return 'meta-zeromount';
+})();
+
 export const PATHS = {
-  BINARY: '/data/adb/modules/zeromount/bin/zm',
+  BINARY: `/data/adb/modules/${MODULE_ID}/bin/zm`,
   DATA_DIR: '/data/adb/zeromount/',
   MODULE_PATHS: '/data/adb/zeromount/module_paths',
   EXCLUSION_FILE: '/data/adb/zeromount/.exclusion_list',
