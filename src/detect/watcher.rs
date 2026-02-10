@@ -27,6 +27,7 @@ const WATCH_MASK: u32 = IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_TO | IN_MOV
 // inotify_event is variable-length; fixed header is 16 bytes on all arches
 const INOTIFY_EVENT_HEADER_SIZE: usize = 16;
 const EVENT_BUF_SIZE: usize = 4096;
+const DEBOUNCE_MS: u64 = 2000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WatchEventKind {
@@ -178,8 +179,24 @@ impl ModuleWatcher {
                 continue;
             }
 
-            debug!(count = events.len(), "module change events received");
-            on_change(events)?;
+            let mut all_events = events;
+            let deadline = std::time::Instant::now()
+                + std::time::Duration::from_millis(DEBOUNCE_MS);
+
+            loop {
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                if remaining.is_zero() {
+                    break;
+                }
+                let more = self.poll(remaining.as_millis() as i32)?;
+                if more.is_empty() {
+                    break;
+                }
+                all_events.extend(more);
+            }
+
+            debug!(count = all_events.len(), "module change events coalesced");
+            on_change(all_events)?;
         }
     }
 }
