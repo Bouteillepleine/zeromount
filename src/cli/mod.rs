@@ -58,6 +58,8 @@ pub enum Commands {
         feature: String,
         state: String,
     },
+    /// Watch /data/adb/modules/ for changes (inotify with polling fallback)
+    Watch,
     /// Diagnostic dump
     Diag,
     /// Print version

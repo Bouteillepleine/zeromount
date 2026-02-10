@@ -18,3 +18,6 @@ COUNT=$(cat /data/adb/zeromount/.bootcount 2>/dev/null || echo 0)
 [ -x "$BIN" ] || exit 1
 
 "$BIN" mount --post-boot
+
+# Long-lived watcher — replaces monitor.sh polling loop
+"$BIN" watch &

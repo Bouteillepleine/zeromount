@@ -318,6 +318,22 @@ pub fn handle_susfs(feature: &str, state: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn handle_watch() -> Result<()> {
+    let modules_dir = Path::new("/data/adb/modules");
+    tracing::info!("starting module watcher on {}", modules_dir.display());
+
+    let mut state = crate::core::types::RuntimeState::read_status_file(
+        Path::new("/data/adb/zeromount/.status.json"),
+    )
+    .unwrap_or_default();
+
+    crate::detect::watcher::start_module_watcher(modules_dir, || {
+        tracing::info!("module change detected, updating status");
+        crate::detect::watcher::touch_status_timestamp(&mut state);
+        Ok(())
+    })
+}
+
 pub fn handle_diag() -> Result<()> {
     let version = env!("CARGO_PKG_VERSION");
     println!("zeromount v{version} diagnostic dump");

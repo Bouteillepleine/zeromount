@@ -54,6 +54,7 @@ fn main() -> Result<()> {
         Commands::Uid { action } => cli::handlers::handle_uid(action),
         Commands::Log { action } => cli::handlers::handle_log(action),
         Commands::Susfs { feature, state } => cli::handlers::handle_susfs(&feature, &state),
+        Commands::Watch => cli::handlers::handle_watch(),
         Commands::Diag => cli::handlers::handle_diag(),
         Commands::Version => {
             println!("zeromount v{}", read_version_from_prop());
