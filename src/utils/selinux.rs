@@ -27,13 +27,21 @@ pub fn mirror_selinux_context(source: &Path, dest: &Path) {
                     buf.len(),
                 );
                 if read > 0 {
-                    libc::setxattr(
+                    let ret = libc::setxattr(
                         dst_c.as_ptr(),
                         attr_ptr,
                         buf.as_ptr() as *const libc::c_void,
                         read as usize,
                         0,
                     );
+                    if ret != 0 {
+                        tracing::debug!(
+                            src = %source.display(),
+                            dest = %dest.display(),
+                            error = %std::io::Error::last_os_error(),
+                            "setxattr failed copying SELinux context"
+                        );
+                    }
                     return;
                 }
             }
@@ -42,12 +50,44 @@ pub fn mirror_selinux_context(source: &Path, dest: &Path) {
 
     let context = b"u:object_r:system_file:s0\0";
     unsafe {
-        libc::setxattr(
+        let ret = libc::setxattr(
             dst_c.as_ptr(),
             attr_ptr,
             context.as_ptr() as *const libc::c_void,
             context.len() - 1,
             0,
         );
+        if ret != 0 {
+            tracing::debug!(
+                dest = %dest.display(),
+                error = %std::io::Error::last_os_error(),
+                "setxattr failed applying fallback SELinux context"
+            );
+        }
+    }
+}
+
+pub fn set_selinux_context(path: &Path, context: &str) {
+    let c_path = match CString::new(path.to_string_lossy().as_bytes()) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let attr = b"security.selinux\0";
+    unsafe {
+        let ret = libc::lsetxattr(
+            c_path.as_ptr(),
+            attr.as_ptr() as *const libc::c_char,
+            context.as_ptr() as *const libc::c_void,
+            context.len(),
+            0,
+        );
+        if ret != 0 {
+            tracing::debug!(
+                path = %path.display(),
+                context,
+                error = %std::io::Error::last_os_error(),
+                "lsetxattr failed"
+            );
+        }
     }
 }

@@ -1,62 +1,22 @@
 use std::ffi::CString;
 use std::fs;
-use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use tracing::{debug, info, warn};
 
 use crate::core::config::{MountConfig, StorageMode as ConfigStorageMode};
 use crate::core::types::CapabilityFlags;
+use crate::utils::command::{run_command_with_timeout, CMD_TIMEOUT};
 
 const TMPFS_SOURCE_POOL: &[&str] = &["tmpfs", "none", "shmem", "shm"];
 const APEX_SPOOF_NAME: &str = "com.android.mntservice";
 const RANDOM_PATH_LEN: usize = 12;
 const FIXED_PATH_NAME: &str = "zeromount";
-const CMD_TIMEOUT: Duration = Duration::from_secs(30);
-const CMD_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const MODULES_DIR_PATH: &str = "/data/adb/modules";
 const MIN_EXT4_SIZE_MB: u64 = 64;
 const LKM_DIR: &str = "lkm";
-
-fn run_command_with_timeout(cmd: &mut Command, timeout: Duration) -> Result<std::process::Output> {
-    cmd.stdout(std::process::Stdio::piped());
-    cmd.stderr(std::process::Stdio::piped());
-
-    let mut child = cmd
-        .spawn()
-        .with_context(|| format!("failed to spawn {:?}", cmd.get_program()))?;
-
-    let deadline = Instant::now() + timeout;
-
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let mut stdout = Vec::new();
-                let mut stderr = Vec::new();
-                if let Some(ref mut out) = child.stdout {
-                    let _ = out.read_to_end(&mut stdout);
-                }
-                if let Some(ref mut err) = child.stderr {
-                    let _ = err.read_to_end(&mut stderr);
-                }
-                return Ok(std::process::Output { status, stdout, stderr });
-            }
-            Ok(None) => {
-                if Instant::now() >= deadline {
-                    warn!(program = ?cmd.get_program(), "command timed out, killing");
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    bail!("command {:?} timed out after {timeout:?}", cmd.get_program());
-                }
-                std::thread::sleep(CMD_POLL_INTERVAL);
-            }
-            Err(e) => bail!("error waiting for {:?}: {e}", cmd.get_program()),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageMode {
@@ -547,6 +507,8 @@ fn try_ext4_storage(base_path: &Path) -> Result<()> {
         bail!("mount ext4 at {}: {}", base_path.display(), errno);
     }
 
+    crate::utils::selinux::set_selinux_context(&image_path, "u:object_r:ksu_file:s0");
+
     Ok(())
 }
 
@@ -612,10 +574,10 @@ fn nuke_ext4_sysfs(mount_point: &Path) {
     let mount_str = mount_point.to_string_lossy();
 
     // Path 1: ksud (KSU/APatch 22105+)
-    match Command::new("ksud")
-        .args(["kernel", "nuke-ext4-sysfs", &mount_str])
-        .output()
-    {
+    match run_command_with_timeout(
+        Command::new("ksud").args(["kernel", "nuke-ext4-sysfs", &mount_str]),
+        CMD_TIMEOUT,
+    ) {
         Ok(output) if output.status.success() => {
             debug!(path = %mount_str, "ext4 sysfs nuked via ksud");
             return;
@@ -635,12 +597,13 @@ fn nuke_ext4_sysfs(mount_point: &Path) {
         return;
     };
 
-    match Command::new("insmod")
-        .arg(&ko_path)
-        .arg(format!("mount_point={mount_str}"))
-        .arg(format!("symaddr={symaddr}"))
-        .output()
-    {
+    match run_command_with_timeout(
+        Command::new("insmod")
+            .arg(&ko_path)
+            .arg(format!("mount_point={mount_str}"))
+            .arg(format!("symaddr={symaddr}")),
+        CMD_TIMEOUT,
+    ) {
         Ok(output) if output.status.code() != Some(0) => {
             // insmod returns non-zero because the module returns -EAGAIN (intentional auto-unload)
             debug!(path = %mount_str, "ext4 sysfs nuked via LKM");
@@ -653,8 +616,8 @@ fn nuke_ext4_sysfs(mount_point: &Path) {
 /// Find the best-matching nuke .ko file for the running kernel.
 /// Files are at <module_dir>/lkm/nuke-android<ver>-<kernel>.ko
 fn select_nuke_ko(_module_base: &Path) -> Option<PathBuf> {
-    // Module directory: /data/adb/modules/zeromount/lkm/
-    let lkm_dir = Path::new("/data/adb/modules/zeromount").join(LKM_DIR);
+    // Module directory: /data/adb/modules/meta-zeromount/lkm/
+    let lkm_dir = Path::new("/data/adb/modules/meta-zeromount").join(LKM_DIR);
     if !lkm_dir.is_dir() {
         return None;
     }
@@ -701,11 +664,12 @@ fn read_kallsyms_address(symbol: &str) -> Option<String> {
 }
 
 fn has_ksud_nuke() -> bool {
-    Command::new("ksud")
-        .args(["kernel", "nuke-ext4-sysfs", "--help"])
-        .output()
-        .map(|o| !String::from_utf8_lossy(&o.stderr).contains("unknown"))
-        .unwrap_or(false)
+    run_command_with_timeout(
+        Command::new("ksud").args(["kernel", "nuke-ext4-sysfs", "--help"]),
+        CMD_TIMEOUT,
+    )
+    .map(|o| !String::from_utf8_lossy(&o.stderr).contains("unknown"))
+    .unwrap_or(false)
 }
 
 fn try_apex_spoof(base_path: &Path) -> Result<(PathBuf, PathBuf)> {

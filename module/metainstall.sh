@@ -1,10 +1,11 @@
 #!/system/bin/sh
-# Runs when ANOTHER module is installed -- rebuild partitions.conf
+# Runs when ANOTHER module is installed via KSU/APatch
 MODDIR="${0%/*}"
 
-case "$(uname -m)" in
-    aarch64) ABI=arm64-v8a ;; armv7*|armv8l) ABI=armeabi-v7a ;;
-    x86_64) ABI=x86_64 ;; i686|i386) ABI=x86 ;;
-esac
+KSU_HAS_METAMODULE=true
+KSU_METAMODULE=meta-zeromount
+export KSU_HAS_METAMODULE KSU_METAMODULE
 
-"$MODDIR/bin/${ABI}/zeromount" module scan --update-conf 2>/dev/null
+handle_partition() { : ; }
+
+install_module

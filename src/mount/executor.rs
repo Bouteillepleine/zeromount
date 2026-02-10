@@ -5,7 +5,8 @@ use tracing::{debug, info, warn};
 
 use crate::core::config::MountConfig;
 use crate::core::types::{
-    CapabilityFlags, MountPlan, MountResult, MountStrategy, RootMountMode, ScannedModule,
+    CapabilityFlags, MountPlan, MountResult, MountStrategy, PartitionMount, RootMountMode,
+    ScannedModule,
 };
 
 use super::magic::mount_magic;
@@ -34,37 +35,72 @@ fn execute_overlay(
     capabilities: &CapabilityFlags,
     mount_config: &MountConfig,
 ) -> Result<Vec<MountResult>> {
-    let mut storage = init_storage(capabilities, mount_config).context("storage init for overlay failed")?;
+    let mut storage = init_storage(capabilities, mount_config)
+        .context("storage init for overlay failed")?;
+
+    // Prevent mount events from propagating to child namespaces
+    {
+        let c_path = std::ffi::CString::new(
+            storage.base_path.to_string_lossy().as_bytes().to_vec()
+        ).context("base_path contains null byte")?;
+        let ret = unsafe {
+            libc::mount(
+                std::ptr::null(),
+                c_path.as_ptr(),
+                std::ptr::null(),
+                libc::MS_PRIVATE,
+                std::ptr::null(),
+            )
+        };
+        if ret != 0 {
+            warn!(error = %std::io::Error::last_os_error(), "MS_PRIVATE failed (non-fatal)");
+        }
+    }
 
     let module_map: std::collections::HashMap<&str, &ScannedModule> =
         modules.iter().map(|m| (m.id.as_str(), m)).collect();
 
-    let mut results = Vec::new();
+    // Phase 1: Stage all lower dirs with .tmp_ prefix, then atomic rename.
+    // If anything fails here, no overlays exist yet — clean exit.
+    let mut staged: Vec<(&PartitionMount, Vec<PathBuf>)> = Vec::new();
 
     for pm in &plan.partition_mounts {
         let mut lower_dirs: Vec<PathBuf> = Vec::new();
 
         for mod_id in &pm.contributing_modules {
-            let lower = storage.lower_dir(mod_id, &pm.partition);
+            let tmp_lower = storage.lower_dir(&format!(".tmp_{mod_id}"), &pm.partition);
+            let final_lower = storage.lower_dir(mod_id, &pm.partition);
+
             if let Some(scanned) = module_map.get(mod_id.as_str()) {
-                // Copy module files into the lower dir for overlay
-                if let Err(e) = prepare_lower_dir(scanned, &pm.partition, &lower) {
-                    warn!(module = %mod_id, error = %e, "failed to prepare lower dir");
-                    continue;
+                if let Err(e) = prepare_lower_dir(scanned, &pm.partition, &tmp_lower) {
+                    warn!(module = %mod_id, error = %e, "staging failed");
+                    let _ = cleanup_storage(&mut storage);
+                    return Ok(Vec::new());
                 }
-                lower_dirs.push(lower);
+                if let Err(e) = std::fs::rename(&tmp_lower, &final_lower) {
+                    warn!(module = %mod_id, error = %e, "atomic rename failed");
+                    let _ = cleanup_storage(&mut storage);
+                    return Ok(Vec::new());
+                }
+                lower_dirs.push(final_lower);
             }
         }
 
+        staged.push((pm, lower_dirs));
+    }
+
+    // Phase 2: All staging succeeded — mount overlays.
+    let mut results = Vec::new();
+
+    for (pm, lower_dirs) in &staged {
         let lower_refs: Vec<&std::path::Path> =
             lower_dirs.iter().map(|p| p.as_path()).collect();
         let work = storage.work_dir(&pm.mount_point.to_string_lossy());
         let target = &pm.mount_point;
-
         let mount_id = pm.contributing_modules.join("+");
+
         let result = mount_overlay(&lower_refs, &work, target, &mount_id, &storage.overlay_source)?;
 
-        // ME12: nuke backing file after successful mount — kernel keeps inode alive
         if result.success {
             if let Err(e) = nuke_backing_file(&storage.base_path) {
                 warn!(error = %e, "nuke backing file failed (non-fatal)");
@@ -74,7 +110,6 @@ fn execute_overlay(
         results.push(result);
     }
 
-    // Explicit cleanup before drop — prevents double-cleanup in Drop impl
     if let Err(e) = cleanup_storage(&mut storage) {
         debug!(error = %e, "storage cleanup failed (non-fatal)");
     }
@@ -88,7 +123,27 @@ fn execute_magic_mount(
     capabilities: &CapabilityFlags,
     mount_config: &MountConfig,
 ) -> Result<Vec<MountResult>> {
-    let mut storage = init_storage(capabilities, mount_config).context("storage init for magic mount failed")?;
+    let mut storage = init_storage(capabilities, mount_config)
+        .context("storage init for magic mount failed")?;
+
+    // Prevent mount events from propagating to child namespaces
+    {
+        let c_path = std::ffi::CString::new(
+            storage.base_path.to_string_lossy().as_bytes().to_vec()
+        ).context("base_path contains null byte")?;
+        let ret = unsafe {
+            libc::mount(
+                std::ptr::null(),
+                c_path.as_ptr(),
+                std::ptr::null(),
+                libc::MS_PRIVATE,
+                std::ptr::null(),
+            )
+        };
+        if ret != 0 {
+            warn!(error = %std::io::Error::last_os_error(), "MS_PRIVATE failed (non-fatal)");
+        }
+    }
 
     let mut results = Vec::new();
     for module in modules {

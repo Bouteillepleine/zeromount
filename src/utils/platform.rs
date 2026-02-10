@@ -4,8 +4,9 @@ use std::process::Command;
 use anyhow::{Context, Result};
 
 use crate::core::types::{RootManager, RootMountMode};
+use crate::utils::command::{run_command_with_timeout, CMD_TIMEOUT};
 
-const ZEROMOUNT_MODULE_DIR: &str = "/data/adb/modules/zeromount";
+const ZEROMOUNT_MODULE_DIR: &str = "/data/adb/modules/meta-zeromount";
 
 // -- KernelSU --
 
@@ -27,16 +28,18 @@ impl RootManager for KsuManager {
     fn susfs_binary_paths(&self) -> Vec<PathBuf> {
         vec![
             PathBuf::from("/data/adb/ksu/bin/ksu_susfs"),
-            PathBuf::from("/data/adb/modules/zeromount/ksu_susfs"),
+            PathBuf::from("/data/adb/modules/meta-zeromount/ksu_susfs"),
         ]
     }
 
     fn update_description(&self, text: &str) -> Result<()> {
         // ksud module config requires a KSU execution context that doesn't
         // exist when the binary runs standalone; fall back to module.prop edit
-        let status = Command::new("ksud")
-            .args(["module", "config", "set", "override.description", text])
-            .status();
+        let status = run_command_with_timeout(
+            Command::new("ksud").args(["module", "config", "set", "override.description", text]),
+            CMD_TIMEOUT,
+        )
+        .map(|o| o.status);
 
         if status.map(|s| s.success()).unwrap_or(false) {
             return Ok(());
@@ -46,10 +49,12 @@ impl RootManager for KsuManager {
     }
 
     fn notify_module_mounted(&self) -> Result<()> {
-        let status = Command::new("ksud")
-            .args(["kernel", "notify-module-mounted"])
-            .status()
-            .context("failed to exec ksud kernel notify-module-mounted")?;
+        let output = run_command_with_timeout(
+            Command::new("ksud").args(["kernel", "notify-module-mounted"]),
+            CMD_TIMEOUT,
+        )
+        .context("failed to exec ksud kernel notify-module-mounted")?;
+        let status = output.status;
         if !status.success() {
             anyhow::bail!("notify-module-mounted failed (exit {})",
                 status.code().unwrap_or(-1));
@@ -84,7 +89,7 @@ impl RootManager for APatchManager {
     fn susfs_binary_paths(&self) -> Vec<PathBuf> {
         vec![
             PathBuf::from("/data/adb/ap/bin/ksu_susfs"),
-            PathBuf::from("/data/adb/modules/zeromount/ksu_susfs"),
+            PathBuf::from("/data/adb/modules/meta-zeromount/ksu_susfs"),
         ]
     }
 
@@ -94,10 +99,12 @@ impl RootManager for APatchManager {
 
     fn notify_module_mounted(&self) -> Result<()> {
         // Same command on APatch -- ksud is available on both platforms
-        let status = Command::new("ksud")
-            .args(["kernel", "notify-module-mounted"])
-            .status()
-            .context("failed to exec ksud kernel notify-module-mounted")?;
+        let output = run_command_with_timeout(
+            Command::new("ksud").args(["kernel", "notify-module-mounted"]),
+            CMD_TIMEOUT,
+        )
+        .context("failed to exec ksud kernel notify-module-mounted")?;
+        let status = output.status;
         if !status.success() {
             anyhow::bail!("notify-module-mounted failed (exit {})",
                 status.code().unwrap_or(-1));
