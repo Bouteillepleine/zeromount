@@ -1,6 +1,14 @@
-import type { PackagesInfo } from 'kernelsu';
 import { listPackages as ksuListPackages, getPackagesInfo as ksuGetPackagesInfo } from 'kernelsu';
 export { spawn } from 'kernelsu';
+
+interface PackagesInfo {
+  packageName: string;
+  versionName: string;
+  versionCode: number;
+  appLabel: string;
+  isSystem: boolean;
+  uid: number;
+}
 
 interface KsuExecResult {
   errno: number;
@@ -23,16 +31,17 @@ export async function ksuExec(cmd: string, timeoutMs = 30000): Promise<KsuExecRe
   }
 
   return new Promise((resolve) => {
-    const callbackName = `ksu_api_cb_${Date.now()}_${execCounter++}` as const;
+    const callbackName = `ksu_api_cb_${Date.now()}_${execCounter++}`;
+    const win = window as unknown as Record<string, unknown>;
 
     const timeoutId = setTimeout(() => {
-      delete window[callbackName];
+      delete win[callbackName];
       resolve({ errno: -1, stdout: '', stderr: 'timeout' });
     }, timeoutMs);
 
-    window[callbackName] = (errno: number, stdout: string, stderr: string) => {
+    win[callbackName] = (errno: number, stdout: string, stderr: string) => {
       clearTimeout(timeoutId);
-      delete window[callbackName];
+      delete win[callbackName];
       resolve({ errno, stdout, stderr });
     };
 
@@ -40,7 +49,7 @@ export async function ksuExec(cmd: string, timeoutMs = 30000): Promise<KsuExecRe
       ksu.exec(cmd, '{}', callbackName);
     } catch {
       clearTimeout(timeoutId);
-      delete window[callbackName];
+      delete win[callbackName];
       resolve({ errno: -1, stdout: '', stderr: 'exec failed' });
     }
   });
