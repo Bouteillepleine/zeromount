@@ -6,6 +6,14 @@ use tracing::{debug, warn};
 use super::{ConfigAction, LogAction, ModuleAction, UidAction, VfsAction};
 
 pub fn handle_mount(post_boot: bool) -> Result<()> {
+    let _lock = match crate::utils::lock::acquire_instance_lock()? {
+        Some(guard) => guard,
+        None => {
+            warn!("another zeromount instance is running, exiting");
+            return Ok(());
+        }
+    };
+
     if post_boot {
         tracing::info!("post-boot tasks started");
 
