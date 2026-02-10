@@ -510,7 +510,7 @@ export function StatusTab() {
         </div>
 
         <div class="status-activity__list">
-          <For each={showAllActivity() ? store.activity() : store.activity().slice(0, 3)}>
+          <For each={store.activity().slice(0, showAllActivity() ? 10 : 3)}>
             {(item, index) => (
               <div
                 class="status-activity__item bg-surface"

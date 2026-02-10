@@ -103,7 +103,7 @@ async function parseExclusionFiles(): Promise<ExcludedUid[]> {
 async function parseActivityLog(): Promise<ActivityItem[]> {
   console.log('[ZM-API] parseActivityLog() called');
   try {
-    const { errno, stdout } = await ksuExec(`tail -50 "${PATHS.ACTIVITY_LOG}"`);
+    const { errno, stdout } = await ksuExec(`tail -10 "${PATHS.ACTIVITY_LOG}"`);
     console.log('[ZM-API] parseActivityLog() result:', { errno, stdout: stdout?.slice(0, 100) });
     if (errno !== 0 || !stdout.trim()) {
       console.log('[ZM-API] parseActivityLog() no activity found');
@@ -112,27 +112,24 @@ async function parseActivityLog(): Promise<ActivityItem[]> {
 
     const validTypes = ['rule_added', 'rule_removed', 'uid_excluded', 'uid_included', 'engine_enabled', 'engine_disabled', 'setting_changed', 'mount_strategy_changed', 'susfs_toggle', 'brene_toggle', 'theme_changed'];
     const lines = stdout.trim().split('\n').filter(line => line.trim());
-    const items = lines.map((line, index) => {
-      const match = line.match(/^\[(.+?)\]\s+(\w+):\s+(.+)$/);
-      if (match) {
-        const [, timestamp, type, message] = match;
-        const normalizedType = type.toLowerCase();
-        return {
-          id: String(index + 1),
-          type: (validTypes.includes(normalizedType) ? normalizedType : 'engine_enabled') as ActivityItem['type'],
-          message,
-          timestamp: new Date(timestamp),
-        };
-      }
-      return {
-        id: String(index + 1),
-        type: 'engine_enabled' as const,
-        message: line,
-        timestamp: new Date(),
-      };
-    });
+    const items: ActivityItem[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const match = lines[i].match(/^\[(.+?)\]\s+(\w+):\s+(.+)$/);
+      if (!match) continue;
+      const [, timestamp, type, message] = match;
+      const parsed = new Date(timestamp);
+      if (isNaN(parsed.getTime())) continue;
+      const normalizedType = type.toLowerCase();
+      items.push({
+        id: String(i + 1),
+        type: (validTypes.includes(normalizedType) ? normalizedType : 'engine_enabled') as ActivityItem['type'],
+        message,
+        timestamp: parsed,
+      });
+    }
+    items.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     console.log('[ZM-API] parseActivityLog() parsed', items.length, 'activity items');
-    return items;
+    return items.slice(0, 10);
   } catch (e) {
     console.error('[ZM-API] parseActivityLog() error:', e);
     return [];
@@ -320,7 +317,6 @@ export const api = {
       throw new Error(stderr || 'Failed to clear rules');
     }
     console.log('[ZM-API] clearAllRules() success');
-    await logActivity('RULES_CLEARED', 'All rules cleared');
   },
 
   async getExcludedUids(): Promise<ExcludedUid[]> {
@@ -373,7 +369,6 @@ export const api = {
       }
     });
 
-    await logActivity('UID_EXCLUDED', `${appName} (${uid})`);
     return {
       uid,
       packageName,
@@ -417,7 +412,6 @@ export const api = {
       }
     });
 
-    await logActivity('UID_INCLUDED', `UID ${uid}`);
   },
 
   async getActivity(): Promise<ActivityItem[]> {
@@ -464,7 +458,6 @@ export const api = {
       throw new Error(stderr || 'Failed to toggle engine');
     }
     console.log('[ZM-API] toggleEngine() success');
-    await logActivity(enable ? 'ENGINE_ENABLED' : 'ENGINE_DISABLED', enable ? 'Engine activated' : 'Engine deactivated');
   },
 
   async setVerboseLogging(enabled: boolean): Promise<void> {

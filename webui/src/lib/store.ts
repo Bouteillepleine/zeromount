@@ -40,6 +40,12 @@ function createAppStore() {
   const [rules, setRules] = createSignal<VfsRule[]>([]);
   const [excludedUids, setExcludedUids] = createSignal<ExcludedUid[]>([]);
   const [activity, setActivity] = createSignal<ActivityItem[]>([]);
+  let activitySeq = 0;
+  const pushActivity = (type: ActivityItem['type'], message: string) => {
+    activitySeq++;
+    setActivity(prev => [{ id: `rt-${activitySeq}`, type, message, timestamp: new Date() }, ...prev].slice(0, 10));
+    api.logActivity(type.toUpperCase(), message).catch(() => {});
+  };
   const [installedApps, setInstalledApps] = createSignal<InstalledApp[]>([]);
   const [ksuModules, setKsuModules] = createSignal<KsuModule[]>([]);
   const [scenario, setScenario] = createSignal<Scenario>('none');
@@ -273,7 +279,15 @@ function createAppStore() {
       // Apply supplementary data (rules list, UIDs, device info, modules)
       setRules(rulesData);
       setExcludedUids(uidsData);
-      setActivity(activityData);
+      // Merge file data with runtime pushActivity items, dedup by message
+      setActivity(prev => {
+        const runtimeItems = prev.filter(item => item.id.startsWith('rt-'));
+        const rtMessages = new Set(runtimeItems.map(item => item.message));
+        const deduped = activityData.filter(item => !rtMessages.has(item.message));
+        const merged = [...runtimeItems, ...deduped];
+        merged.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        return merged.slice(0, 10);
+      });
       setSystemInfo('kernelVersion', sysInfo.kernelVersion);
       setSystemInfo('uptime', sysInfo.uptime);
       setSystemInfo('deviceModel', sysInfo.deviceModel);
@@ -305,14 +319,16 @@ function createAppStore() {
 
     const newState = !engineActive();
     console.log('[ZM-Store] toggleEngine() called, newState:', newState);
+    setEngineActive(newState);
+    pushActivity(newState ? 'engine_enabled' : 'engine_disabled', newState ? 'Engine → ON' : 'Engine → OFF');
     setLoading('engine', true);
     try {
       await api.toggleEngine(newState);
-      setEngineActive(newState);
       console.log('[ZM-Store] toggleEngine() success, engine now:', newState);
       showToast(newState ? 'Engine activated' : 'Engine deactivated', 'success');
     } catch (err) {
       console.error('[ZM-Store] toggleEngine() error:', err);
+      setEngineActive(!newState);
       showToast('Failed to toggle engine', 'error');
     } finally {
       setLoading('engine', false);
@@ -337,6 +353,7 @@ function createAppStore() {
       setExcludedUids(prev => [...prev, excluded]);
       setStats('excludedUids', s => s + 1);
       console.log('[ZM-Store] excludeUid() success');
+      pushActivity('uid_excluded', `${appName} (UID ${uid})`);
       showToast(`Excluded ${appName}`, 'success');
       return excluded;
     } catch (err) {
@@ -367,6 +384,7 @@ function createAppStore() {
       setExcludedUids(prev => prev.filter(u => u.uid !== uid));
       setStats('excludedUids', s => s - 1);
       console.log('[ZM-Store] includeUid() success');
+      pushActivity('uid_included', `UID ${uid} included`);
       showToast('UID included', 'success');
     } catch (err) {
       console.error('[ZM-Store] includeUid() error:', err);
@@ -385,6 +403,7 @@ function createAppStore() {
       setRules([]);
       setStats('activeRules', 0);
       console.log('[ZM-Store] clearAllRules() success');
+      pushActivity('rule_removed', 'All rules cleared');
       showToast('All rules cleared', 'success');
     } catch (err) {
       console.error('[ZM-Store] clearAllRules() error:', err);
@@ -397,9 +416,9 @@ function createAppStore() {
   const updateSettings = (updates: Partial<Settings>) => {
     console.log('[ZM-Store] updateSettings() called:', updates);
     setSettings(updates);
-    if (updates.theme) api.logActivity('THEME_CHANGED', `Theme → ${updates.theme}`).catch(e => console.warn('[ZM-Store] audit log failed:', e));
-    if (updates.accentColor) api.logActivity('THEME_CHANGED', `Accent → ${updates.accentColor}`).catch(e => console.warn('[ZM-Store] audit log failed:', e));
-    if (updates.fixedNav !== undefined) api.logActivity('SETTING_CHANGED', `Fixed nav → ${updates.fixedNav ? 'ON' : 'OFF'}`).catch(e => console.warn('[ZM-Store] audit log failed:', e));
+    if (updates.theme) pushActivity('theme_changed', `Theme → ${updates.theme}`);
+    if (updates.accentColor) pushActivity('theme_changed', `Accent → ${updates.accentColor}`);
+    if (updates.fixedNav !== undefined) pushActivity('setting_changed', `Fixed nav → ${updates.fixedNav ? 'ON' : 'OFF'}`);
   };
 
   const fetchSystemColor = async () => {
@@ -417,7 +436,7 @@ function createAppStore() {
     setSettings({ verboseLogging: enabled });
     try {
       await api.setVerboseLogging(enabled);
-      await api.logActivity('SETTING_CHANGED', `Verbose logging → ${enabled ? 'ON' : 'OFF'}`);
+      pushActivity('setting_changed', `Verbose logging → ${enabled ? 'ON' : 'OFF'}`);
     } catch (e) {
       console.error('[ZM-Store] setVerboseLogging() error:', e);
       showToast('Failed to set verbose logging', 'error');
@@ -512,7 +531,7 @@ function createAppStore() {
         await api.writeSusfsConfigVar('force_hide_lsposed', value ? '1' : '0');
         configVarSet = true;
       }
-      await api.logActivity('BRENE_TOGGLE', `${key} → ${value ? 'ON' : 'OFF'}`);
+      pushActivity('brene_toggle', `${key} → ${value ? 'ON' : 'OFF'}`);
     } catch (e) {
       console.error('[ZM-Store] setBreneToggle() error:', e);
       showToast(`Failed to save ${key}`, 'error');
@@ -547,7 +566,7 @@ function createAppStore() {
     setSettings('susfs', key, value);
     try {
       await api.configSet(`susfs.${key}`, String(value));
-      await api.logActivity('SUSFS_TOGGLE', `${key} → ${value ? 'ON' : 'OFF'}`);
+      pushActivity('susfs_toggle', `${key} → ${value ? 'ON' : 'OFF'}`);
     } catch (e) {
       console.error('[ZM-Store] setSusfsToggle() error:', e);
       showToast(`Failed to save ${key}`, 'error');
@@ -560,7 +579,7 @@ function createAppStore() {
     setSettings('uname', 'mode', mode);
     try {
       await api.configSet('uname.mode', mode);
-      await api.logActivity('SETTING_CHANGED', `Uname mode → ${mode}`);
+      pushActivity('setting_changed', `Uname mode → ${mode}`);
     } catch (e) {
       console.error('[ZM-Store] setUnameMode() error:', e);
       showToast('Failed to save uname mode', 'error');
@@ -573,7 +592,7 @@ function createAppStore() {
     setSettings('uname', field, value);
     try {
       await api.configSet(`uname.${field}`, value);
-      await api.logActivity('SETTING_CHANGED', `Uname ${field} → ${value || '(empty)'}`);
+      pushActivity('setting_changed', `Uname ${field} → ${value || '(empty)'}`);
     } catch (e) {
       console.error('[ZM-Store] setUnameField() error:', e);
       showToast(`Failed to save uname ${field}`, 'error');
@@ -677,7 +696,7 @@ function createAppStore() {
     setSettings('mount', 'storage_mode', mode);
     try {
       await api.configSet('mount.storage_mode', mode);
-      await api.logActivity('SETTING_CHANGED', `Storage mode → ${mode}`);
+      pushActivity('setting_changed', `Storage mode → ${mode}`);
       console.log('[ZM-Store] setMountStorageMode() saved:', mode);
     } catch (e) {
       console.error('[ZM-Store] setMountStorageMode() error:', e);
@@ -692,7 +711,7 @@ function createAppStore() {
     setSettings('mount', key, value);
     try {
       await api.configSet(`mount.${key}`, String(value));
-      await api.logActivity('SETTING_CHANGED', `${key} → ${value ? 'ON' : 'OFF'}`);
+      pushActivity('setting_changed', `${key} → ${value ? 'ON' : 'OFF'}`);
       console.log('[ZM-Store] setMountToggle() saved:', key, value);
     } catch (e) {
       console.error('[ZM-Store] setMountToggle() error:', e);
@@ -706,7 +725,7 @@ function createAppStore() {
     setSettings('mount', 'mount_source', value);
     try {
       await api.configSet('mount.mount_source', value);
-      await api.logActivity('SETTING_CHANGED', `Staging source → ${value}`);
+      pushActivity('setting_changed', `Staging source → ${value}`);
     } catch (e) {
       showToast('Failed to save mount source', 'error');
       setSettings('mount', 'mount_source', prev);
@@ -718,7 +737,7 @@ function createAppStore() {
     setSettings('mount', 'overlay_source', value);
     try {
       await api.configSet('mount.overlay_source', value);
-      await api.logActivity('SETTING_CHANGED', `Overlay source → ${value}`);
+      pushActivity('setting_changed', `Overlay source → ${value}`);
     } catch (e) {
       showToast('Failed to save overlay source', 'error');
       setSettings('mount', 'overlay_source', prev);
@@ -745,7 +764,7 @@ function createAppStore() {
         api.configSet('mount.overlay_preferred', String(newOverlay)),
         api.configSet('mount.magic_mount_fallback', String(newMagic)),
       ]);
-      await api.logActivity('MOUNT_STRATEGY_CHANGED', `Strategy → ${strategy}`);
+      pushActivity('mount_strategy_changed', `Strategy → ${strategy}`);
       showToast('Mount strategy changed — reboot to apply', 'warning');
       console.log('[ZM-Store] setMountStrategy() saved:', strategy, '→ overlay_preferred:', newOverlay, 'magic_mount_fallback:', newMagic);
     } catch (e) {
