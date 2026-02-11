@@ -343,7 +343,7 @@ impl MountController<Mounted> {
         match crate::susfs::SusfsClient::probe() {
             Ok(client) => {
                 client.ensure_root_paths();
-                match crate::susfs::brene::apply_brene(&client, &self.state.config) {
+                match crate::susfs::brene::apply_brene(&client, &self.state.config, true) {
                     Ok(brene) => {
                         debug!(
                             paths = brene.paths_hidden,

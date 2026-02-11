@@ -362,12 +362,16 @@ pub fn handle_susfs_retry(wait: bool) -> Result<()> {
         .map(|s| s.modules.iter().map(|m| m.id.clone()).collect())
         .unwrap_or_default();
 
+    // Path hiding only — kstat already succeeded at boot.
+    // Skip kstat to avoid phantom file failures from VFS-redirected directories.
     let modules_dir = Path::new("/data/adb/modules");
     if modules_dir.exists() && !boot_module_ids.is_empty() {
         if let Ok(modules) = crate::modules::scanner::scan_modules(modules_dir) {
             for module in &modules {
                 if !module.files.is_empty() && boot_module_ids.contains(&module.id) {
-                    crate::vfs::executor::apply_module_susfs_protections(&client, module);
+                    crate::vfs::executor::apply_module_susfs_protections(
+                        &client, module, true, false,
+                    );
                 }
             }
         }

@@ -59,12 +59,11 @@ pub fn build_kstat_values_from_paths(virtual_path: &str, real_path: &str) -> Res
             })
         }
         Err(_) => {
-            // Virtual path doesn't exist yet -- derive from parent directory
-            let parent = Path::new(virtual_path)
-                .parent()
-                .with_context(|| format!("no parent for '{virtual_path}'"))?;
-            let parent_meta = fs::metadata(parent)
-                .with_context(|| format!("stat failed for parent '{}'", parent.display()))?;
+            // Virtual path doesn't exist yet — walk up ancestors until we find
+            // a real directory. Modules can create deep trees under paths that
+            // don't exist on stock (e.g. /system/priv-app/NewApp/lib/arm/).
+            let ancestor_meta = find_existing_ancestor(virtual_path)
+                .with_context(|| format!("no existing ancestor for '{virtual_path}'"))?;
 
             let synthetic_ino = {
                 let now = std::time::SystemTime::now()
@@ -79,20 +78,31 @@ pub fn build_kstat_values_from_paths(virtual_path: &str, real_path: &str) -> Res
 
             Ok(KstatValues {
                 ino: Some(synthetic_ino),
-                dev: Some(parent_meta.dev()),
+                dev: Some(ancestor_meta.dev()),
                 nlink: Some(1),
                 size: Some(size),
-                atime_sec: Some(parent_meta.atime()),
+                atime_sec: Some(ancestor_meta.atime()),
                 atime_nsec: Some(0),
-                mtime_sec: Some(parent_meta.mtime()),
+                mtime_sec: Some(ancestor_meta.mtime()),
                 mtime_nsec: Some(0),
-                ctime_sec: Some(parent_meta.ctime()),
+                ctime_sec: Some(ancestor_meta.ctime()),
                 ctime_nsec: Some(0),
                 blksize: Some(blksize),
                 blocks: Some(blocks),
             })
         }
     }
+}
+
+fn find_existing_ancestor(path: &str) -> Option<fs::Metadata> {
+    let mut current = Path::new(path);
+    while let Some(parent) = current.parent() {
+        if let Ok(meta) = fs::metadata(parent) {
+            return Some(meta);
+        }
+        current = parent;
+    }
+    None
 }
 
 #[cfg(test)]

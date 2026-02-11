@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use tracing::warn;
+use tracing::debug;
 
 use crate::core::types::{ModuleFileType, ScannedModule};
 
@@ -27,7 +27,7 @@ pub fn detect_conflicts(modules: &[ScannedModule]) -> u32 {
     let mut conflict_count = 0u32;
     for (path, providers) in &file_map {
         if providers.len() > 1 {
-            warn!(
+            debug!(
                 path = %path.display(),
                 modules = %providers.join(", "),
                 "file conflict: multiple modules provide same path"
@@ -37,7 +37,7 @@ pub fn detect_conflicts(modules: &[ScannedModule]) -> u32 {
     }
 
     if conflict_count > 0 {
-        warn!(count = conflict_count, "file conflicts detected");
+        debug!(count = conflict_count, "file conflicts detected");
     }
 
     conflict_count

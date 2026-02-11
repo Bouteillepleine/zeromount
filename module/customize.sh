@@ -59,6 +59,9 @@ if command -v chcon >/dev/null 2>&1; then
     chcon -R u:object_r:adb_data_file:s0 "$ZM_DATA" 2>/dev/null || true
 fi
 
+# Prevent nested webroot from stale installs
+rm -rf "$MODPATH/webroot/webroot" 2>/dev/null
+
 # Skip webroot/ — KSU handles its perms
 set_perm_recursive "$MODPATH/bin" 0 0 0755 0755
 chmod 755 "$MODPATH"/*.sh

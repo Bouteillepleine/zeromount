@@ -124,7 +124,7 @@ impl SusfsClient {
             }
         }
         if !data_set {
-            warn!("no valid android_data_root_path candidate found");
+            debug!("no valid android_data_root_path candidate found");
         }
 
         let sdcard_candidates = [
@@ -148,7 +148,7 @@ impl SusfsClient {
             }
         }
         if !sdcard_set {
-            warn!("no valid sdcard_root_path candidate found");
+            debug!("no valid sdcard_root_path candidate found");
         }
     }
 

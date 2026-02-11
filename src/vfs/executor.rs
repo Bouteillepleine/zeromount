@@ -178,9 +178,9 @@ impl VfsExecutor {
     }
 
     /// Apply SUSFS protections for a module's injected files.
-    /// Phase 2: kstat spoofing + path hiding.
+    /// Phase 2: kstat only — path hiding deferred until sdcard is decrypted.
     fn apply_susfs_protections(&self, susfs: &SusfsClient, module: &ScannedModule) {
-        apply_module_susfs_protections(susfs, module);
+        apply_module_susfs_protections(susfs, module, false, true);
     }
 }
 
@@ -201,32 +201,40 @@ fn is_brene_owned_target(target: &Path) -> bool {
 ///
 /// This is the standalone entry point used by both the VFS pipeline (via
 /// `VfsExecutor::apply_susfs_protections`) and the CLI deferred-retry path.
-pub fn apply_module_susfs_protections(susfs: &SusfsClient, module: &ScannedModule) {
+///
+/// `skip_kstat`: skip kstat spoofing (deferred retry — already done at boot)
+/// `skip_path_hide`: skip add_sus_path (boot — sdcard not decrypted, always EINVAL)
+pub fn apply_module_susfs_protections(
+    susfs: &SusfsClient,
+    module: &ScannedModule,
+    skip_kstat: bool,
+    skip_path_hide: bool,
+) {
     let features = susfs.features();
 
     // Pass 1: kstat for all qualifying entries.
     // Completes before any path hiding — add_sus_path on a parent directory
     // makes children invisible to stat(), breaking kstat_redirect.
-    for file in &module.files {
-        match file.file_type {
-            ModuleFileType::Regular
-            | ModuleFileType::Directory
-            | ModuleFileType::Symlink
-            | ModuleFileType::RedirectXattr => {}
-            _ => continue,
-        }
+    if !skip_kstat && features.kstat {
+        for file in &module.files {
+            match file.file_type {
+                ModuleFileType::Regular
+                | ModuleFileType::Directory
+                | ModuleFileType::Symlink
+                | ModuleFileType::RedirectXattr => {}
+                _ => continue,
+            }
 
-        let source = module.path.join(&file.relative_path);
-        let target = match resolve_target_path(&file.relative_path) {
-            Some(t) => t,
-            None => continue,
-        };
+            let source = module.path.join(&file.relative_path);
+            let target = match resolve_target_path(&file.relative_path) {
+                Some(t) => t,
+                None => continue,
+            };
 
-        if features.open_redirect && is_brene_owned_target(&target) {
-            continue;
-        }
+            if features.open_redirect && is_brene_owned_target(&target) {
+                continue;
+            }
 
-        if features.kstat {
             let source_str = source.display().to_string();
             let target_str = target.display().to_string();
             if let Err(e) = apply_kstat_redirect_or_static(
@@ -247,7 +255,7 @@ pub fn apply_module_susfs_protections(susfs: &SusfsClient, module: &ScannedModul
     // Pass 2: path hiding for directories only.
     // add_sus_path on a directory implicitly hides all children in the kernel,
     // so individual file hiding is redundant.
-    if features.path {
+    if !skip_path_hide && features.path {
         for file in &module.files {
             if file.file_type != ModuleFileType::Directory {
                 continue;

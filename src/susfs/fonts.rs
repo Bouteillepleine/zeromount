@@ -63,7 +63,12 @@ pub fn redirect_font_file(
                 debug!("open_redirect_all: {target} -> {replacement}");
             }
             Err(e) => {
-                warn!("open_redirect_all failed for {target}: {e}");
+                // Custom fonts that don't exist on stock system — expected, not an error
+                if !Path::new(target).exists() {
+                    debug!("open_redirect_all skipped for {target}: target absent on stock");
+                } else {
+                    warn!("open_redirect_all failed for {target}: {e}");
+                }
                 return Ok(result);
             }
         }
