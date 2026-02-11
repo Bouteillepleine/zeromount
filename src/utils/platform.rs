@@ -35,8 +35,13 @@ impl RootManager for KsuManager {
     fn update_description(&self, text: &str) -> Result<()> {
         // ksud module config requires a KSU execution context that doesn't
         // exist when the binary runs standalone; fall back to module.prop edit
+        let ksud = if Path::new("/data/adb/ksu/bin/ksud").exists() {
+            "/data/adb/ksu/bin/ksud"
+        } else {
+            "ksud"
+        };
         let status = run_command_with_timeout(
-            Command::new("ksud").args(["module", "config", "set", "override.description", text]),
+            Command::new(ksud).args(["module", "config", "set", "override.description", text]),
             CMD_TIMEOUT,
         )
         .map(|o| o.status);
@@ -49,8 +54,13 @@ impl RootManager for KsuManager {
     }
 
     fn notify_module_mounted(&self) -> Result<()> {
+        let ksud = if Path::new("/data/adb/ksu/bin/ksud").exists() {
+            "/data/adb/ksu/bin/ksud"
+        } else {
+            "ksud"
+        };
         let output = run_command_with_timeout(
-            Command::new("ksud").args(["kernel", "notify-module-mounted"]),
+            Command::new(ksud).args(["kernel", "notify-module-mounted"]),
             CMD_TIMEOUT,
         )
         .context("failed to exec ksud kernel notify-module-mounted")?;
@@ -98,9 +108,13 @@ impl RootManager for APatchManager {
     }
 
     fn notify_module_mounted(&self) -> Result<()> {
-        // Same command on APatch -- ksud is available on both platforms
+        let ksud = if Path::new("/data/adb/ap/bin/ksud").exists() {
+            "/data/adb/ap/bin/ksud"
+        } else {
+            "ksud"
+        };
         let output = run_command_with_timeout(
-            Command::new("ksud").args(["kernel", "notify-module-mounted"]),
+            Command::new(ksud).args(["kernel", "notify-module-mounted"]),
             CMD_TIMEOUT,
         )
         .context("failed to exec ksud kernel notify-module-mounted")?;

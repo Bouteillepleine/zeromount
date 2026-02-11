@@ -53,10 +53,17 @@ pub fn hide_maps(client: &SusfsClient, map_paths: &[&str]) -> Result<u32> {
     }
 
     let mut count = 0u32;
-    for path in map_paths {
-        match client.add_sus_map(path) {
+    for entry in map_paths {
+        if entry.starts_with('/') && !Path::new(entry).exists() {
+            debug!("skipping nonexistent map path: {entry}");
+            continue;
+        }
+        match client.add_sus_map(entry) {
             Ok(()) => count += 1,
-            Err(e) => debug!("add_sus_map failed for {path}: {e}"),
+            Err(e) => {
+                let kind = if entry.starts_with('/') { "path" } else { "pattern" };
+                debug!("add_sus_map failed for {kind} {entry}: {e}");
+            }
         }
     }
     Ok(count)

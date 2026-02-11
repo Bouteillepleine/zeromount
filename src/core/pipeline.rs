@@ -234,7 +234,13 @@ impl MountController<Planned> {
 
         // Probe SUSFS if enabled
         let susfs = if config.susfs.enabled {
-            crate::susfs::SusfsClient::probe().ok()
+            match crate::susfs::SusfsClient::probe() {
+                Ok(client) => {
+                    client.ensure_root_paths();
+                    Some(client)
+                }
+                Err(_) => None,
+            }
         } else {
             None
         };
@@ -336,6 +342,7 @@ impl MountController<Mounted> {
 
         match crate::susfs::SusfsClient::probe() {
             Ok(client) => {
+                client.ensure_root_paths();
                 match crate::susfs::brene::apply_brene(&client, &self.state.config) {
                     Ok(brene) => {
                         debug!(
