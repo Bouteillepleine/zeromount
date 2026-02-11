@@ -51,6 +51,13 @@ zeromount/
 release/
 *.zip
 
+# Documentation (project-internal, not shipped)
+docs/
+CLAUDE.md
+
+# WebUI source
+webui/
+
 # Compiled binaries (built via CI)
 module/bin/*/zeromount
 module/bin/*/aapt
