@@ -23,7 +23,7 @@ pub fn execute_plan(
     match strategy {
         MountStrategy::Overlay => execute_overlay(plan, modules, capabilities, mount_config),
         MountStrategy::MagicMount => execute_magic_mount(modules, capabilities, mount_config),
-        MountStrategy::Vfs => {
+        MountStrategy::Vfs | MountStrategy::Font => {
             Ok(Vec::new())
         }
     }

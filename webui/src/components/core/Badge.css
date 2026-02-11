@@ -38,3 +38,8 @@
   background: var(--color-info);
   box-shadow: 0 0 12px var(--color-info-glow);
 }
+
+.badge--accent {
+  background: var(--text-accent);
+  box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.4);
+}

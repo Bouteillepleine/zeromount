@@ -51,6 +51,7 @@ function createAppStore() {
   const [scenario, setScenario] = createSignal<Scenario>('none');
   const [capabilities, setCapabilities] = createSignal<CapabilityFlags | null>(null);
   const [moduleStatuses, setModuleStatuses] = createSignal<ModuleStatus[]>([]);
+  const [fontModules, setFontModules] = createSignal<string[]>([]);
   const [degraded, setDegraded] = createSignal(false);
   const [degradationReason, setDegradationReason] = createSignal<string | null>(null);
   const [rootManager, setRootManager] = createSignal<string | null>(null);
@@ -265,6 +266,7 @@ function createAppStore() {
         setScenario(status.scenario as Scenario);
         setCapabilities(status.capabilities);
         setModuleStatuses(status.modules);
+        setFontModules(status.font_modules || []);
         setDegraded(status.degraded);
         setDegradationReason(status.degradation_reason);
         if (status.engine_active !== null) setEngineActive(status.engine_active);
@@ -759,7 +761,7 @@ function createAppStore() {
     const prevOverlay = settings.mount.overlay_preferred;
     const prevMagic = settings.mount.magic_mount_fallback;
 
-    const mapping: Record<MountStrategy, [boolean, boolean]> = {
+    const mapping: Record<string, [boolean, boolean]> = {
       'Vfs': [true, true],
       'Overlay': [true, false],
       'MagicMount': [false, true],
@@ -799,6 +801,7 @@ function createAppStore() {
       setScenario(status.scenario as Scenario);
       setCapabilities(status.capabilities);
       setModuleStatuses(status.modules);
+      setFontModules(status.font_modules || []);
       setDegraded(status.degraded);
       setDegradationReason(status.degradation_reason);
       setRootManager(status.root_manager);
@@ -1032,6 +1035,7 @@ function createAppStore() {
     scenario,
     capabilities,
     moduleStatuses,
+    fontModules,
     degraded,
     degradationReason,
     rootManager,

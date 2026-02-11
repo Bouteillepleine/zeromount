@@ -44,7 +44,7 @@ export interface CapabilityFlags {
   tmpfs_xattr: boolean;
 }
 
-export type MountStrategy = 'Vfs' | 'Overlay' | 'MagicMount';
+export type MountStrategy = 'Vfs' | 'Overlay' | 'MagicMount' | 'Font';
 
 export interface ModuleStatus {
   id: string;
@@ -65,6 +65,7 @@ export interface RuntimeStatus {
   hidden_path_count: number;
   susfs_version: string | null;
   modules: ModuleStatus[];
+  font_modules: string[];
   timestamp: number;
   degraded: boolean;
   degradation_reason: string | null;

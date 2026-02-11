@@ -286,6 +286,7 @@ export const MockAPI = {
         { id: 'fontmanager', strategy: 'Vfs', rules_applied: 45, rules_failed: 0, errors: [], mount_paths: ['/system/fonts', '/vendor/fonts'] },
         { id: 'busybox-ndk', strategy: 'Overlay', rules_applied: 0, rules_failed: 0, errors: [], mount_paths: ['/system/bin'] },
       ],
+      font_modules: ['fontmanager'],
       timestamp: Date.now(),
       degraded: false,
       degradation_reason: null,

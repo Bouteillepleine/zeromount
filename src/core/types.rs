@@ -93,6 +93,7 @@ pub enum MountStrategy {
     Vfs,
     Overlay,
     MagicMount,
+    Font,
 }
 
 impl Default for MountStrategy {
@@ -172,6 +173,7 @@ pub struct RuntimeState {
     pub hidden_path_count: u32,
     pub susfs_version: Option<String>,
     pub modules: Vec<ModuleStatus>,
+    pub font_modules: Vec<String>,
     pub timestamp: u64,
     pub degraded: bool,
     pub degradation_reason: Option<String>,
@@ -190,6 +192,7 @@ impl Default for RuntimeState {
             hidden_path_count: 0,
             susfs_version: None,
             modules: Vec::new(),
+            font_modules: Vec::new(),
             timestamp: 0,
             degraded: false,
             degradation_reason: None,

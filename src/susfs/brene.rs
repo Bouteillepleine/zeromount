@@ -69,10 +69,16 @@ const SDCARD_DATA_PATTERNS: &[&str] = &[
 pub struct BreneResult {
     pub paths_hidden: u32,
     pub maps_hidden: u32,
-    pub font_modules_processed: u32,
+    pub font_modules: Vec<FontModuleInfo>,
     pub uname_spoofed: bool,
     pub avc_spoofed: bool,
     pub log_enabled: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct FontModuleInfo {
+    pub id: String,
+    pub redirect_count: u32,
 }
 
 /// Apply BRENE (Be Root, ENjoy Everything) toggles via SUSFS.
@@ -136,9 +142,9 @@ pub fn apply_brene(client: &SusfsClient, config: &ZeroMountConfig, skip_path_hid
     // -- Font redirect (delegates to F15) --
 
     if brene.auto_hide_fonts {
-        let count = process_font_modules(client, &config.mount.overlay_source);
-        result.font_modules_processed = count;
-        info!("BRENE: processed {count} font modules");
+        let fonts = process_font_modules(client, &config.mount.overlay_source);
+        info!("BRENE: processed {} font modules: {:?}", fonts.len(), fonts);
+        result.font_modules = fonts;
     }
 
     // -- Custom user-defined lists --
@@ -232,7 +238,7 @@ pub fn apply_brene(client: &SusfsClient, config: &ZeroMountConfig, skip_path_hid
         "BRENE complete: {} paths, {} maps, {} font modules, uname={}, avc={}",
         result.paths_hidden,
         result.maps_hidden,
-        result.font_modules_processed,
+        result.font_modules.len(),
         result.uname_spoofed,
         result.avc_spoofed,
     );
@@ -285,18 +291,18 @@ fn hide_apk_paths(client: &SusfsClient) -> u32 {
 }
 
 /// Scan /data/adb/modules/ for font modules and apply redirect via F15.
-fn process_font_modules(client: &SusfsClient, overlay_source: &str) -> u32 {
+fn process_font_modules(client: &SusfsClient, overlay_source: &str) -> Vec<FontModuleInfo> {
     let modules_dir = Path::new(MODULES_DIR);
     if !modules_dir.is_dir() {
-        return 0;
+        return Vec::new();
     }
 
     let entries = match fs::read_dir(modules_dir) {
         Ok(e) => e,
-        Err(_) => return 0,
+        Err(_) => return Vec::new(),
     };
 
-    let mut count = 0u32;
+    let mut results = Vec::new();
 
     for entry in entries.filter_map(|e| e.ok()) {
         let module_path = entry.path();
@@ -304,7 +310,6 @@ fn process_font_modules(client: &SusfsClient, overlay_source: &str) -> u32 {
             continue;
         }
 
-        // Skip disabled/removing modules
         if module_path.join("disable").exists() || module_path.join("remove").exists() {
             continue;
         }
@@ -325,13 +330,16 @@ fn process_font_modules(client: &SusfsClient, overlay_source: &str) -> u32 {
                     "font module '{}': strategy={:?}, redirected={}",
                     module_id, result.strategy, result.redirect_count
                 );
-                count += 1;
+                results.push(FontModuleInfo {
+                    id: module_id,
+                    redirect_count: result.redirect_count as u32,
+                });
             }
             Err(e) => warn!("font module '{module_id}' failed: {e}"),
         }
     }
 
-    count
+    results
 }
 
 /// Retry add_sus_path for font replacement files that failed at boot (EINVAL).
@@ -811,7 +819,7 @@ mod tests {
         let r = BreneResult::default();
         assert_eq!(r.paths_hidden, 0);
         assert_eq!(r.maps_hidden, 0);
-        assert_eq!(r.font_modules_processed, 0);
+        assert!(r.font_modules.is_empty());
         assert!(!r.uname_spoofed);
         assert!(!r.avc_spoofed);
         assert!(!r.log_enabled);
@@ -878,15 +886,15 @@ mod tests {
     }
 
     #[test]
-    fn process_font_modules_returns_zero_when_no_modules_dir() {
+    fn process_font_modules_returns_empty_when_no_modules_dir() {
         let client = SusfsClient::new_for_test(true, SusfsFeatures {
             open_redirect: true,
             kstat: true,
             path: true,
             ..SusfsFeatures::default()
         });
-        let count = process_font_modules(&client, "auto");
-        assert_eq!(count, 0);
+        let results = process_font_modules(&client, "auto");
+        assert!(results.is_empty());
     }
 
     #[test]

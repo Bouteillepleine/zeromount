@@ -21,6 +21,13 @@ export function ModulesTab() {
     }
   });
 
+  const isFontModule = (mod: KsuModule) => {
+    const name = mod.path.split('/').pop() || '';
+    return store.fontModules().includes(name);
+  };
+
+  const isEffectivelyLoaded = (mod: KsuModule) => mod.isLoaded || isFontModule(mod);
+
   const filteredModules = () => {
     const query = searchQuery().toLowerCase();
     if (!query) return store.ksuModules();
@@ -39,7 +46,7 @@ export function ModulesTab() {
     });
 
     try {
-      if (mod.isLoaded) {
+      if (isEffectivelyLoaded(mod)) {
         await store.unloadKsuModule(mod.name, mod.path);
       } else {
         await store.loadKsuModule(mod.name, mod.path);
@@ -122,13 +129,13 @@ export function ModulesTab() {
               >
                 <div class="modules__item-row">
                   <div
-                    class={`modules__item-icon ${mod.isLoaded ? 'modules__item-icon--active' : 'modules__item-icon--inactive'}`}
+                    class={`modules__item-icon ${isEffectivelyLoaded(mod) ? 'modules__item-icon--active' : 'modules__item-icon--inactive'}`}
                   >
                     <svg
                       width="22"
                       height="22"
                       viewBox="0 0 24 24"
-                      fill={mod.isLoaded ? 'white' : t().textTertiary}
+                      fill={isEffectivelyLoaded(mod) ? 'white' : t().textTertiary}
                     >
                       <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/>
                     </svg>
@@ -144,10 +151,10 @@ export function ModulesTab() {
                   </div>
 
                   <Badge
-                    variant={mod.isLoaded ? 'success' : 'default'}
+                    variant={isEffectivelyLoaded(mod) ? (isFontModule(mod) ? 'accent' : 'success') : 'default'}
                     size="small"
                   >
-                    {mod.isLoaded ? 'Loaded' : 'Not Loaded'}
+                    {isEffectivelyLoaded(mod) ? (isFontModule(mod) ? 'Font' : 'Loaded') : 'Not Loaded'}
                   </Badge>
 
                   <svg
@@ -198,15 +205,15 @@ export function ModulesTab() {
                         <div>
                           <span class="modules__stat-label">Status:</span>
                           <span
-                            class={`modules__stat-value ${mod.isLoaded ? 'modules__stat-value--active' : 'modules__stat-value--inactive'}`}
+                            class={`modules__stat-value ${isEffectivelyLoaded(mod) ? 'modules__stat-value--active' : 'modules__stat-value--inactive'}`}
                           >
-                            {mod.isLoaded ? 'Active' : 'Inactive'}
+                            {isEffectivelyLoaded(mod) ? 'Active' : 'Inactive'}
                           </span>
                         </div>
                       </div>
 
                       <Button
-                        variant={mod.isLoaded ? 'danger' : 'primary'}
+                        variant={isEffectivelyLoaded(mod) ? 'danger' : 'primary'}
                         size="small"
                         loading={isModuleLoading(mod.path)}
                         onClick={(e) => {
@@ -215,7 +222,7 @@ export function ModulesTab() {
                         }}
                         style="margin-top: 8px;"
                       >
-                        {mod.isLoaded ? 'HOT UNLOAD' : 'HOT LOAD'}
+                        {isEffectivelyLoaded(mod) ? 'HOT UNLOAD' : 'HOT LOAD'}
                       </Button>
                     </div>
                   </div>

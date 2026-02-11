@@ -165,6 +165,7 @@ export function StatusTab() {
   const strategyColor = (s: MountStrategy) => {
     switch (s) {
       case 'Vfs': return store.currentTheme().colorSuccess;
+      case 'Font': return store.currentTheme().textAccent;
       case 'Overlay': return store.currentTheme().colorInfo || '#3b82f6';
       case 'MagicMount': return store.currentTheme().colorWarning;
     }
@@ -174,15 +175,20 @@ export function StatusTab() {
     const prefixes = new Set<string>();
     store.rules().forEach(rule => {
       const parts = rule.target.split('/').filter(Boolean);
-      if (parts.length > 0) {
-        const prefix = '/' + parts[0];
-        if (prefix !== '/[BLOCKED]') prefixes.add(prefix);
+      if (parts.length >= 2) {
+        const prefix = '/' + parts[0] + '/' + parts[1];
+        if (!prefix.startsWith('/[BLOCKED]')) prefixes.add(prefix);
       }
     });
     return Array.from(prefixes).sort();
   });
 
-  const loadedModulesCount = createMemo(() => store.ksuModules().filter(m => m.isLoaded).length);
+  const loadedModulesCount = createMemo(() => {
+    const fontIds = new Set(store.fontModules());
+    return store.ksuModules().filter(m =>
+      m.isLoaded || fontIds.has(m.path.split('/').pop() || '')
+    ).length;
+  });
 
   const isInitialLoad = () => store.loading.status && !store.systemInfo.driverVersion;
 
@@ -392,11 +398,11 @@ export function StatusTab() {
                 <div class="status-mode__module-row">
                   <span class="status-mode__module-name color-text-primary">{mod.id}</span>
                   <div class="status-mode__module-meta">
-                    <Badge variant={mod.strategy === 'Vfs' ? 'success' : mod.strategy === 'Overlay' ? 'info' : 'default'}>
+                    <Badge variant={mod.strategy === 'Vfs' ? 'success' : mod.strategy === 'Font' ? 'accent' : mod.strategy === 'Overlay' ? 'info' : 'default'}>
                       {mod.strategy}
                     </Badge>
                     <span class="status-mode__module-rules color-text-tertiary">
-                      {mod.rules_applied} rules
+                      {mod.rules_applied} {mod.strategy === 'Font' ? 'files' : 'rules'}
                     </span>
                   </div>
                 </div>

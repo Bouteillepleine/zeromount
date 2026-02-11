@@ -130,6 +130,9 @@ pub fn handle_status(json: bool) -> Result<()> {
         println!("scenario: {:?}", state.scenario);
         println!("engine_active: {:?}", state.engine_active);
         println!("modules: {}", state.modules.len());
+        if !state.font_modules.is_empty() {
+            println!("font_modules: {}", state.font_modules.join(", "));
+        }
     }
     Ok(())
 }

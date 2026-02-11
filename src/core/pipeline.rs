@@ -302,16 +302,16 @@ impl MountController<Mounted> {
         info!("pipeline: finalize phase");
 
         // 1. SUSFS protections (BRENE)
-        let hidden_paths = self.apply_susfs_protections();
+        let (hidden_paths, font_infos) = self.apply_susfs_protections();
 
         // 2. Update module description with status summary
-        let summary = self.build_description_summary();
+        let summary = self.build_description_summary(&font_infos);
         if let Err(e) = self.state.root_mgr.update_description(&summary) {
             debug!("update_description failed (non-fatal): {e}");
         }
 
         // 3. Build RuntimeState and persist atomically (ME07: write tmp then rename)
-        let mut runtime_state = self.build_runtime_state();
+        let mut runtime_state = self.build_runtime_state(&font_infos);
         runtime_state.hidden_path_count = hidden_paths;
         write_status_json_atomic(&runtime_state);
 
@@ -334,10 +334,10 @@ impl MountController<Mounted> {
         })
     }
 
-    fn apply_susfs_protections(&self) -> u32 {
+    fn apply_susfs_protections(&self) -> (u32, Vec<crate::susfs::brene::FontModuleInfo>) {
         if !self.state.config.susfs.enabled {
             debug!("SUSFS disabled in config, skipping protections");
-            return 0;
+            return (0, Vec::new());
         }
 
         match crate::susfs::SusfsClient::probe() {
@@ -348,25 +348,25 @@ impl MountController<Mounted> {
                         debug!(
                             paths = brene.paths_hidden,
                             maps = brene.maps_hidden,
-                            fonts = brene.font_modules_processed,
+                            fonts = brene.font_modules.len(),
                             "BRENE applied"
                         );
-                        brene.paths_hidden
+                        (brene.paths_hidden, brene.font_modules)
                     }
                     Err(e) => {
                         warn!("BRENE application failed (non-fatal): {e}");
-                        0
+                        (0, Vec::new())
                     }
                 }
             }
             Err(e) => {
                 debug!("SUSFS probe failed, skipping protections: {e}");
-                0
+                (0, Vec::new())
             }
         }
     }
 
-    fn build_description_summary(&self) -> String {
+    fn build_description_summary(&self, font_infos: &[crate::susfs::brene::FontModuleInfo]) -> String {
         let mounted: Vec<&str> = self
             .state
             .results
@@ -375,25 +375,47 @@ impl MountController<Mounted> {
             .map(|r| r.module_id.as_str())
             .collect();
 
-        if mounted.is_empty() {
+        // Exclude font-only modules from the VFS count
+        let font_ids: Vec<&str> = font_infos.iter().map(|f| f.id.as_str()).collect();
+        let vfs_only: Vec<&str> = mounted.iter()
+            .filter(|id| !font_ids.contains(id))
+            .copied()
+            .collect();
+
+        if vfs_only.is_empty() && font_infos.is_empty() {
             return "😴 Idle — No Module Mounted | Mountless VFS-level Redirection. GHOST👻"
                 .to_string();
         }
 
-        let label = if mounted.len() == 1 { "Module" } else { "Modules" };
-        let names = mounted.join(", ");
-        format!("✅ GHOST ⚡️ | {} {} | {}", mounted.len(), label, names)
+        let mut parts = Vec::new();
+
+        if !vfs_only.is_empty() {
+            let label = if vfs_only.len() == 1 { "Module" } else { "Modules" };
+            let names = vfs_only.join(", ");
+            parts.push(format!("{} {} | {}", vfs_only.len(), label, names));
+        }
+
+        if !font_infos.is_empty() {
+            let names: Vec<&str> = font_infos.iter().map(|f| f.id.as_str()).collect();
+            parts.push(format!("Font: {}", names.join(", ")));
+        }
+
+        format!("✅ GHOST ⚡️ | {}", parts.join(" | "))
     }
 
-    fn build_runtime_state(&self) -> RuntimeState {
+    fn build_runtime_state(&self, font_infos: &[crate::susfs::brene::FontModuleInfo]) -> RuntimeState {
         let det = &self.state.detection;
         let total_rules: u32 = self.state.results.iter().map(|r| r.rules_applied).sum();
         let total_failed: u32 = self.state.results.iter().map(|r| r.rules_failed).sum();
 
-        let modules: Vec<ModuleStatus> = self
+        let font_ids: Vec<&str> = font_infos.iter().map(|f| f.id.as_str()).collect();
+
+        // VFS modules, excluding font-only modules (0 VFS rules, handled by BRENE)
+        let mut modules: Vec<ModuleStatus> = self
             .state
             .results
             .iter()
+            .filter(|r| !(font_ids.contains(&r.module_id.as_str()) && r.rules_applied == 0))
             .map(|r| ModuleStatus {
                 id: r.module_id.clone(),
                 strategy: r.strategy_used,
@@ -403,6 +425,22 @@ impl MountController<Mounted> {
                 mount_paths: r.mount_paths.clone(),
             })
             .collect();
+
+        // Font modules as first-class entries
+        for fi in font_infos {
+            // If module already in list (has VFS rules too), skip — it's a hybrid
+            if modules.iter().any(|m| m.id == fi.id) {
+                continue;
+            }
+            modules.push(ModuleStatus {
+                id: fi.id.clone(),
+                strategy: MountStrategy::Font,
+                rules_applied: fi.redirect_count,
+                rules_failed: 0,
+                errors: Vec::new(),
+                mount_paths: vec!["/system/fonts".to_string()],
+            });
+        }
 
         let no_vfs = matches!(det.scenario, Scenario::None | Scenario::SusfsOnly);
         let degraded = total_failed > 0 || no_vfs;
@@ -437,6 +475,7 @@ impl MountController<Mounted> {
             hidden_path_count: 0,
             susfs_version: det.capabilities.susfs_version.clone(),
             modules,
+            font_modules: font_infos.iter().map(|f| f.id.clone()).collect(),
             timestamp,
             degraded,
             degradation_reason,
@@ -472,8 +511,8 @@ fn cleanup_previous_mounts() {
                     debug!(module = %module.id, error = %e, "previous magic umount failed");
                 }
             }
-            MountStrategy::Vfs => {
-                // VFS uses CLEAR_ALL; no per-mount teardown needed
+            MountStrategy::Vfs | MountStrategy::Font => {
+                // VFS uses CLEAR_ALL; Font uses SUSFS redirect — no per-mount teardown
             }
         }
     }
@@ -606,7 +645,7 @@ mod tests {
             },
         };
 
-        let state = ctrl.build_runtime_state();
+        let state = ctrl.build_runtime_state(&[]);
         assert!(state.degraded);
         assert_eq!(
             state.degradation_reason.as_deref(),
@@ -652,7 +691,7 @@ mod tests {
             },
         };
 
-        let state = ctrl.build_runtime_state();
+        let state = ctrl.build_runtime_state(&[]);
         assert_eq!(state.rule_count, 15);
         assert!(state.degraded);
         assert_eq!(state.modules.len(), 2);
@@ -694,7 +733,7 @@ mod tests {
             },
         };
 
-        let desc = ctrl.build_description_summary();
+        let desc = ctrl.build_description_summary(&Vec::new());
         assert_eq!(desc, "✅ GHOST ⚡️ | 1 Module | a");
     }
 
@@ -714,7 +753,7 @@ mod tests {
             },
         };
 
-        let desc = ctrl.build_description_summary();
+        let desc = ctrl.build_description_summary(&[]);
         assert!(desc.contains("Idle"));
         assert!(desc.contains("GHOST"));
     }
@@ -754,8 +793,37 @@ mod tests {
             },
         };
 
-        let desc = ctrl.build_description_summary();
+        let desc = ctrl.build_description_summary(&[]);
         assert_eq!(desc, "✅ GHOST ⚡️ | 2 Modules | lsposed, shamiko");
+    }
+
+    #[test]
+    fn description_includes_font_modules() {
+        let ctrl = MountController {
+            state: Mounted {
+                config: ZeroMountConfig::default(),
+                root_mgr: Box::new(TestRootManager),
+                detection: DetectionResult {
+                    scenario: Scenario::Full,
+                    capabilities: CapabilityFlags::default(),
+                    driver_version: Some(1),
+                    timestamp: 0,
+                },
+                results: vec![MountResult {
+                    module_id: "clean".into(),
+                    strategy_used: MountStrategy::Vfs,
+                    success: true,
+                    rules_applied: 2,
+                    rules_failed: 0,
+                    error: None,
+                    mount_paths: vec![],
+                }],
+            },
+        };
+
+        let fonts = vec![crate::susfs::brene::FontModuleInfo { id: "viperfxmod".into(), redirect_count: 5 }];
+        let desc = ctrl.build_description_summary(&fonts);
+        assert_eq!(desc, "✅ GHOST ⚡️ | 1 Module | clean | Font: viperfxmod");
     }
 
     #[test]
@@ -782,7 +850,7 @@ mod tests {
             },
         };
 
-        let state = ctrl.build_runtime_state();
+        let state = ctrl.build_runtime_state(&[]);
         assert!(!state.degraded);
         assert!(state.degradation_reason.is_none());
         assert_eq!(state.engine_active, Some(true));

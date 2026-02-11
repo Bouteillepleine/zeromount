@@ -3,7 +3,7 @@ import type { JSXElement } from 'solid-js';
 import './Badge.css';
 
 interface BadgeProps {
-  variant?: 'default' | 'success' | 'error' | 'info';
+  variant?: 'default' | 'success' | 'error' | 'info' | 'accent';
   size?: 'small' | 'medium';
   children?: JSXElement;
 }
