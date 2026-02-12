@@ -265,13 +265,35 @@ impl MountController<Planned> {
         let caps = &self.state.detection.capabilities;
         if config.mount.overlay_preferred {
             info!("executing via overlay (preferred)");
-            let results = crate::mount::executor::execute_plan(
+            let overlay_result = crate::mount::executor::execute_plan(
                 plan, modules, MountStrategy::Overlay, caps, &config.mount,
-            )?;
-            if results.iter().all(|r| r.success) || !config.mount.magic_mount_fallback {
-                return Ok(results);
+            );
+
+            match overlay_result {
+                Ok(ref results)
+                    if !results.is_empty() && results.iter().all(|r| r.success) =>
+                {
+                    return overlay_result;
+                }
+                Ok(ref results) if results.iter().any(|r| r.success) => {
+                    let ok = results.iter().filter(|r| r.success).count();
+                    let fail = results.iter().filter(|r| !r.success).count();
+                    warn!(ok, fail, "partial overlay success -- failed mounts left uncovered");
+                    return overlay_result;
+                }
+                Ok(_) if !config.mount.magic_mount_fallback => {
+                    return overlay_result;
+                }
+                Ok(_) => {
+                    warn!("overlay produced no successful mounts, falling back to magic mount");
+                }
+                Err(e) if config.mount.magic_mount_fallback => {
+                    warn!(error = %e, "overlay execution failed, falling back to magic mount");
+                }
+                Err(e) => {
+                    return Err(e);
+                }
             }
-            warn!("overlay had failures, falling back to magic mount");
         }
 
         self.execute_magic(modules, plan, config)
@@ -321,12 +343,8 @@ impl MountController<Mounted> {
         runtime_state.hidden_path_count = hidden_paths;
         write_status_json_atomic(&runtime_state);
 
-        // 4. Reset bootcount on successful pipeline completion (ME15)
-        ZeroMountConfig::reset_bootcount().unwrap_or_else(|e| {
-            warn!("bootcount reset failed: {e}");
-        });
-
-        // 5. KSU09: notify-module-mounted LAST -- after all rules, SUSFS, description
+        // 4. KSU09: notify-module-mounted LAST -- after all rules, SUSFS, description
+        // Bootcount reset moved to service.sh — only reset after sys.boot_completed=1
         if let Err(e) = self.state.root_mgr.notify_module_mounted() {
             warn!("notify-module-mounted failed (non-fatal): {e}");
         }
@@ -373,18 +391,20 @@ impl MountController<Mounted> {
     }
 
     fn build_description_summary(&self, font_infos: &[crate::susfs::brene::FontModuleInfo]) -> String {
-        let mounted: Vec<&str> = self
+        // Overlay produces one MountResult per mount point — deduplicate module IDs.
+        // Split on '+' handles multi-module mount points like "viperfxmod+clean".
+        let mounted: std::collections::BTreeSet<&str> = self
             .state
             .results
             .iter()
             .filter(|r| r.success)
-            .map(|r| r.module_id.as_str())
+            .flat_map(|r| r.module_id.split('+'))
             .collect();
 
-        // Exclude font-only modules from the VFS count
-        let font_ids: Vec<&str> = font_infos.iter().map(|f| f.id.as_str()).collect();
+        let font_ids: std::collections::BTreeSet<&str> =
+            font_infos.iter().map(|f| f.id.as_str()).collect();
         let vfs_only: Vec<&str> = mounted.iter()
-            .filter(|id| !font_ids.contains(id))
+            .filter(|id| !font_ids.contains(*id))
             .copied()
             .collect();
 
@@ -416,21 +436,27 @@ impl MountController<Mounted> {
 
         let font_ids: Vec<&str> = font_infos.iter().map(|f| f.id.as_str()).collect();
 
-        // VFS modules, excluding font-only modules (0 VFS rules, handled by BRENE)
-        let mut modules: Vec<ModuleStatus> = self
-            .state
-            .results
-            .iter()
-            .filter(|r| !(font_ids.contains(&r.module_id.as_str()) && r.rules_applied == 0))
-            .map(|r| ModuleStatus {
+        // Overlay produces one MountResult per mount point — merge by module ID
+        // so viperfxmod with 5 mount points becomes a single entry.
+        let mut merged: std::collections::BTreeMap<String, ModuleStatus> = std::collections::BTreeMap::new();
+        for r in &self.state.results {
+            if font_ids.contains(&r.module_id.as_str()) && r.rules_applied == 0 {
+                continue;
+            }
+            let entry = merged.entry(r.module_id.clone()).or_insert_with(|| ModuleStatus {
                 id: r.module_id.clone(),
                 strategy: r.strategy_used,
-                rules_applied: r.rules_applied,
-                rules_failed: r.rules_failed,
-                errors: r.error.iter().cloned().collect(),
-                mount_paths: r.mount_paths.clone(),
-            })
-            .collect();
+                rules_applied: 0,
+                rules_failed: 0,
+                errors: Vec::new(),
+                mount_paths: Vec::new(),
+            });
+            entry.rules_applied += r.rules_applied;
+            entry.rules_failed += r.rules_failed;
+            entry.mount_paths.extend(r.mount_paths.clone());
+            entry.errors.extend(r.error.iter().cloned());
+        }
+        let mut modules: Vec<ModuleStatus> = merged.into_values().collect();
 
         // Font modules as first-class entries
         for fi in font_infos {
