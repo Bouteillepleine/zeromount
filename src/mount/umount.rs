@@ -30,7 +30,11 @@ pub fn umount_magic(mount_paths: &[String]) -> Result<()> {
         let ret = unsafe { libc::umount2(c_path.as_ptr(), libc::MNT_DETACH) };
         if ret != 0 {
             let errno = std::io::Error::last_os_error();
-            warn!(path = %path, error = %errno, "magic mount umount failed");
+            if errno.raw_os_error() == Some(libc::EINVAL) {
+                debug!(path = %path, "umount skipped (not mounted)");
+            } else {
+                warn!(path = %path, error = %errno, "magic mount umount failed");
+            }
         } else {
             debug!(path = %path, "magic mount unmounted");
         }

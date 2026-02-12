@@ -161,9 +161,9 @@ impl MountController<Planned> {
     /// Execute mount operations: dispatch to VFS, overlay, or magic mount.
     ///
     /// Strategy selection based on scenario:
-    ///   Full / KernelOnly     -> VFS (primary), overlay/magic fallback
+    ///   Full / KernelOnly     -> VFS default, user can override to overlay/magic
     ///   SusfsFrontend/SusfsOnly -> overlay preferred, magic fallback
-    ///   None                  -> magic mount only
+    ///   None                  -> overlay preferred, magic fallback
     pub fn execute(self) -> Result<MountController<Mounted>> {
         info!("pipeline: execute phase");
 
@@ -185,7 +185,27 @@ impl MountController<Planned> {
 
         let results = match scenario {
             Scenario::Full | Scenario::KernelOnly => {
-                self.execute_vfs(&self.state.modules, &self.state.plan, capabilities, config)
+                match config.user_strategy_override() {
+                    Some(MountStrategy::Overlay) => {
+                        info!("user override: overlay strategy on VFS-capable kernel");
+                        crate::mount::executor::manage_skip_mount_flags(
+                            &self.state.modules,
+                            self.state.root_mgr.mount_mode(),
+                        );
+                        self.execute_overlay_or_magic(&self.state.modules, &self.state.plan, config)
+                    }
+                    Some(MountStrategy::MagicMount) => {
+                        info!("user override: magic mount on VFS-capable kernel");
+                        crate::mount::executor::manage_skip_mount_flags(
+                            &self.state.modules,
+                            self.state.root_mgr.mount_mode(),
+                        );
+                        self.execute_magic(&self.state.modules, &self.state.plan, config)
+                    }
+                    _ => {
+                        self.execute_vfs(&self.state.modules, &self.state.plan, capabilities, config)
+                    }
+                }
             }
             Scenario::SusfsFrontend | Scenario::SusfsOnly => {
                 crate::mount::executor::manage_skip_mount_flags(
@@ -199,7 +219,7 @@ impl MountController<Planned> {
                     &self.state.modules,
                     self.state.root_mgr.mount_mode(),
                 );
-                self.execute_magic(&self.state.modules, &self.state.plan, config)
+                self.execute_overlay_or_magic(&self.state.modules, &self.state.plan, config)
             }
         }
         .context("mount execution failed")?;

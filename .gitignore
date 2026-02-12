@@ -55,8 +55,8 @@ release/
 docs/
 CLAUDE.md
 
-# WebUI source
-webui/
+# WebUI build dependencies (source tracked, node_modules excluded)
+webui/node_modules/
 
 # Compiled binaries (built via CI)
 module/bin/*/zeromount

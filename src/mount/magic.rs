@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ffi::CString;
 use std::fs;
 use std::os::unix::fs as unix_fs;
@@ -7,6 +8,88 @@ use anyhow::{bail, Context, Result};
 use tracing::{debug, info, warn};
 
 use crate::core::types::{ModuleFileType, MountResult, MountStrategy, ScannedModule};
+
+fn is_on_readonly_fs(path: &Path) -> bool {
+    let check = nearest_existing_ancestor(path);
+    let c_path = match CString::new(check.as_os_str().as_encoded_bytes()) {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    let mut stat = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    let ret = unsafe { libc::statvfs(c_path.as_ptr(), stat.as_mut_ptr()) };
+    if ret != 0 {
+        return false;
+    }
+    let stat = unsafe { stat.assume_init() };
+    (stat.f_flag & libc::ST_RDONLY) != 0
+}
+
+fn nearest_existing_ancestor(path: &Path) -> PathBuf {
+    let mut current = path.to_path_buf();
+    while !current.exists() {
+        match current.parent() {
+            Some(p) => current = p.to_path_buf(),
+            None => break,
+        }
+    }
+    current
+}
+
+fn mount_tmpfs_over(dir: &Path) -> Result<()> {
+    let staging = PathBuf::from("/dev/.zm_magic_stage");
+    let stage_key = dir.strip_prefix("/").unwrap_or(dir);
+    let stage_sub = staging.join(stage_key);
+    fs::create_dir_all(&stage_sub)?;
+
+    if dir.is_dir() {
+        let _ = copy_dir_recursive(dir, &stage_sub);
+    }
+
+    let c_source = CString::new("tmpfs")?;
+    let c_target = CString::new(dir.as_os_str().as_encoded_bytes())?;
+    let c_fstype = CString::new("tmpfs")?;
+    let c_data = CString::new("mode=0755")?;
+
+    let ret = unsafe {
+        libc::mount(
+            c_source.as_ptr(),
+            c_target.as_ptr(),
+            c_fstype.as_ptr(),
+            0,
+            c_data.as_ptr() as *const libc::c_void,
+        )
+    };
+    if ret != 0 {
+        let _ = fs::remove_dir_all(&staging);
+        bail!("tmpfs mount at {} failed: {}", dir.display(), std::io::Error::last_os_error());
+    }
+
+    // Restore stock contents + SELinux context
+    if stage_sub.is_dir() {
+        let _ = copy_dir_recursive(&stage_sub, dir);
+        crate::utils::selinux::mirror_selinux_context(&stage_sub, dir);
+    }
+
+    let _ = fs::remove_dir_all(&staging);
+    debug!(path = %dir.display(), "tmpfs mounted over read-only ancestor");
+    Ok(())
+}
+
+fn ensure_writable(path: &Path, tmpfs_ancestors: &mut HashSet<PathBuf>) -> Result<()> {
+    if !is_on_readonly_fs(path) {
+        return Ok(());
+    }
+
+    let ancestor = nearest_existing_ancestor(path);
+
+    if tmpfs_ancestors.iter().any(|a| ancestor.starts_with(a)) {
+        return Ok(());
+    }
+
+    mount_tmpfs_over(&ancestor)?;
+    tmpfs_ancestors.insert(ancestor);
+    Ok(())
+}
 
 /// Magic mount: per-file bind mounts with a tmpfs skeleton for new directories.
 ///
@@ -25,6 +108,7 @@ pub fn mount_magic(
     let mut applied = 0u32;
     let mut failed = 0u32;
     let mut errors = Vec::new();
+    let mut tmpfs_ancestors = HashSet::new();
 
     for file in &module.files {
         let source = module.path.join(&file.relative_path);
@@ -32,7 +116,7 @@ pub fn mount_magic(
 
         match file.file_type {
             ModuleFileType::Regular | ModuleFileType::Symlink => {
-                match bind_mount_file(&source, &target) {
+                match bind_mount_file(&source, &target, &mut tmpfs_ancestors) {
                     Ok(()) => {
                         mount_paths.push(target.to_string_lossy().to_string());
                         applied += 1;
@@ -55,7 +139,7 @@ pub fn mount_magic(
                 // For existing directories, files inside will be individually mounted.
                 if !target.exists() {
                     let skel = staging_dir.join(&module.id).join(&file.relative_path);
-                    match create_skeleton_dir(&skel, &source, &target) {
+                    match create_skeleton_dir(&skel, &source, &target, &mut tmpfs_ancestors) {
                         Ok(()) => {
                             mount_paths.push(target.to_string_lossy().to_string());
                             applied += 1;
@@ -85,7 +169,7 @@ pub fn mount_magic(
 
             // Redirect xattrs: bind-mount the file as-is (no redirect resolution)
             ModuleFileType::RedirectXattr => {
-                match bind_mount_file(&source, &target) {
+                match bind_mount_file(&source, &target, &mut tmpfs_ancestors) {
                     Ok(()) => {
                         mount_paths.push(target.to_string_lossy().to_string());
                         applied += 1;
@@ -128,23 +212,29 @@ pub fn mount_magic(
     })
 }
 
-/// Bind mount a single file from source to target.
-fn bind_mount_file(source: &Path, target: &Path) -> Result<()> {
-    // Ensure parent directory exists
+fn bind_mount_file(source: &Path, target: &Path, tmpfs_ancestors: &mut HashSet<PathBuf>) -> Result<()> {
     if let Some(parent) = target.parent() {
         if !parent.exists() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("cannot create parent: {}", parent.display()))?;
+            if fs::create_dir_all(parent).is_err() {
+                ensure_writable(parent, tmpfs_ancestors)?;
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("cannot create parent: {}", parent.display()))?;
+            }
         }
     }
 
-    // Create target file if it doesn't exist (bind mount needs a mount point)
     if !target.exists() {
         if source.is_dir() {
-            fs::create_dir_all(target)?;
+            if fs::create_dir_all(target).is_err() {
+                ensure_writable(target, tmpfs_ancestors)?;
+                fs::create_dir_all(target)?;
+            }
         } else {
-            fs::File::create(target)
-                .with_context(|| format!("cannot create mount point: {}", target.display()))?;
+            if fs::File::create(target).is_err() {
+                ensure_writable(target, tmpfs_ancestors)?;
+                fs::File::create(target)
+                    .with_context(|| format!("cannot create mount point: {}", target.display()))?;
+            }
         }
     }
 
@@ -177,25 +267,26 @@ fn bind_mount_file(source: &Path, target: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Create a tmpfs-backed skeleton directory and bind mount it to the target.
-/// Copies the structure from the module source, then bind mounts the whole tree.
-fn create_skeleton_dir(skeleton: &Path, source: &Path, target: &Path) -> Result<()> {
+fn create_skeleton_dir(skeleton: &Path, source: &Path, target: &Path, tmpfs_ancestors: &mut HashSet<PathBuf>) -> Result<()> {
     fs::create_dir_all(skeleton)
         .with_context(|| format!("cannot create skeleton: {}", skeleton.display()))?;
 
-    // Copy directory contents from module source into the skeleton
     copy_dir_recursive(source, skeleton)?;
 
-    // Ensure target's parent exists
     if let Some(parent) = target.parent() {
         if !parent.exists() {
-            fs::create_dir_all(parent)?;
+            if fs::create_dir_all(parent).is_err() {
+                ensure_writable(parent, tmpfs_ancestors)?;
+                fs::create_dir_all(parent)?;
+            }
         }
     }
 
-    // Create mount point
     if !target.exists() {
-        fs::create_dir_all(target)?;
+        if fs::create_dir_all(target).is_err() {
+            ensure_writable(target, tmpfs_ancestors)?;
+            fs::create_dir_all(target)?;
+        }
     }
 
     // Bind mount the skeleton to the target

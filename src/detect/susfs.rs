@@ -10,40 +10,23 @@ use crate::utils::platform;
 /// SUSFS module directory names (checked under /data/adb/modules/)
 const SUSFS_MODULE_IDS: &[&str] = &["susfs4ksu", "susfs"];
 
-/// DET03: Two-phase SUSFS probe.
+/// DET03: Kernel-first SUSFS probe with stale marker recovery.
 ///
-/// 1. Module state -- check for .disabled marker in SUSFS module dir.
-///    If disabled, skip all SUSFS operations regardless of kernel state.
-/// 2. Kernel probe -- SusfsClient::probe() queries standard features
-///    (via show_enabled_features) and custom commands (kstat_redirect,
-///    open_redirect_all) via supercall. Binary presence is logged but
-///    does not gate detection.
+/// Probes kernel FIRST (ground truth), then reconciles module disable markers.
+/// If kernel has SUSFS but module has a stale disable marker from a previous
+/// kernel, the marker is removed automatically.
 pub fn probe_susfs() -> Result<CapabilityFlags> {
     let mut caps = CapabilityFlags::default();
 
-    // Layer 1: Module state check
-    if is_susfs_module_disabled() {
-        debug!("SUSFS module disabled via .disabled marker, skipping");
-        return Ok(caps);
-    }
-
-    // Binary location -- useful for CLI operations but not required for
-    // kernel-level detection (SusfsClient::probe uses supercalls directly)
     let binary = find_susfs_binary();
     match &binary {
         Some(p) => debug!("SUSFS binary found at: {}", p.display()),
         None => debug!("SUSFS binary not found (kernel probe still proceeds)"),
     }
 
-    // Layer 2+3: SusfsClient probes both standard features
-    // (via show_enabled_features) and custom commands (via supercall probe)
-    match SusfsClient::probe() {
-        Ok(client) => {
-            if !client.is_available() {
-                debug!("SUSFS kernel supercall not responding");
-                return Ok(caps);
-            }
-
+    // Kernel probe FIRST — ground truth
+    let kernel_has_susfs = match SusfsClient::probe() {
+        Ok(client) if client.is_available() => {
             caps.susfs_available = true;
             caps.susfs_version = client.version().map(String::from);
 
@@ -52,8 +35,6 @@ pub fn probe_susfs() -> Result<CapabilityFlags> {
             caps.susfs_path = features.path;
             caps.susfs_maps = features.maps;
             caps.susfs_open_redirect = features.open_redirect;
-
-            // Layer 3: Custom kernel ioctls (probed inside SusfsClient::probe)
             caps.susfs_kstat_redirect = features.kstat_redirect;
             caps.susfs_open_redirect_all = features.open_redirect_all;
 
@@ -64,10 +45,24 @@ pub fn probe_susfs() -> Result<CapabilityFlags> {
                 caps.susfs_open_redirect, caps.susfs_kstat_redirect,
                 caps.susfs_open_redirect_all
             );
+            true
+        }
+        Ok(_) => {
+            debug!("SUSFS kernel supercall not responding");
+            false
         }
         Err(e) => {
             warn!("SUSFS probe failed: {e}");
+            false
         }
+    };
+
+    // Reconcile module disable marker with kernel reality
+    if kernel_has_susfs && is_susfs_module_disabled() {
+        warn!("SUSFS kernel present but module disabled — removing stale marker");
+        remove_susfs_disable_marker();
+    } else if !kernel_has_susfs && is_susfs_module_disabled() {
+        debug!("no SUSFS kernel, disable marker is correct state");
     }
 
     Ok(caps)
@@ -91,6 +86,20 @@ fn is_susfs_module_disabled() -> bool {
     }
     // No SUSFS module dir found -- not disabled (may still have binary)
     false
+}
+
+fn remove_susfs_disable_marker() {
+    let modules_dir = Path::new("/data/adb/modules");
+    for module_id in SUSFS_MODULE_IDS {
+        let disable_path = modules_dir.join(module_id).join("disable");
+        if disable_path.exists() {
+            if let Err(_e) = std::fs::remove_file(&disable_path) {
+                warn!("failed to remove stale disable marker: {}", disable_path.display());
+            } else {
+                debug!("removed stale disable marker: {}", disable_path.display());
+            }
+        }
+    }
 }
 
 /// Locate the SUSFS binary by searching platform-specific paths.

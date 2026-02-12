@@ -565,6 +565,16 @@ impl ZeroMountConfig {
     pub fn module_overrides(&self, module_id: &str) -> ModuleOverrides {
         self.per_module.get(module_id).cloned().unwrap_or_default()
     }
+
+    /// Decode WebUI strategy booleans into an explicit override.
+    /// Returns None for the default (both true = VFS auto).
+    pub fn user_strategy_override(&self) -> Option<crate::core::types::MountStrategy> {
+        match (self.mount.overlay_preferred, self.mount.magic_mount_fallback) {
+            (true, true) => None,
+            (true, false) => Some(crate::core::types::MountStrategy::Overlay),
+            (false, _) => Some(crate::core::types::MountStrategy::MagicMount),
+        }
+    }
 }
 
 // -- Helpers --
