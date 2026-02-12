@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 use crate::core::config::MountConfig;
 use crate::core::types::{
@@ -11,7 +11,7 @@ use crate::core::types::{
 
 use super::magic::mount_magic;
 use super::overlay::mount_overlay;
-use super::storage::{cleanup_storage, init_storage, nuke_backing_file};
+use super::storage::init_storage;
 
 pub fn execute_plan(
     plan: &MountPlan,
@@ -60,29 +60,22 @@ fn execute_overlay(
     let module_map: std::collections::HashMap<&str, &ScannedModule> =
         modules.iter().map(|m| (m.id.as_str(), m)).collect();
 
-    // Phase 1: Stage all lower dirs with .tmp_ prefix, then atomic rename.
-    // If anything fails here, no overlays exist yet — clean exit.
+    // Phase 1: Stage lower dirs directly (no .tmp_ rename — the two-phase
+    // approach already guarantees no mounts happen until all staging succeeds).
     let mut staged: Vec<(&PartitionMount, Vec<PathBuf>)> = Vec::new();
 
     for pm in &plan.partition_mounts {
         let mut lower_dirs: Vec<PathBuf> = Vec::new();
 
         for mod_id in &pm.contributing_modules {
-            let tmp_lower = storage.lower_dir(&format!(".tmp_{mod_id}"), &pm.partition);
-            let final_lower = storage.lower_dir(mod_id, &pm.partition);
+            let lower = storage.lower_dir(mod_id, &pm.partition);
 
             if let Some(scanned) = module_map.get(mod_id.as_str()) {
-                if let Err(e) = prepare_lower_dir(scanned, &pm.partition, &tmp_lower) {
+                if let Err(e) = prepare_lower_dir(scanned, &pm.partition, &lower) {
                     warn!(module = %mod_id, error = %e, "staging failed");
-                    let _ = cleanup_storage(&mut storage);
-                    return Ok(Vec::new());
+                    anyhow::bail!("overlay staging failed for module {mod_id}: {e}");
                 }
-                if let Err(e) = std::fs::rename(&tmp_lower, &final_lower) {
-                    warn!(module = %mod_id, error = %e, "atomic rename failed");
-                    let _ = cleanup_storage(&mut storage);
-                    return Ok(Vec::new());
-                }
-                lower_dirs.push(final_lower);
+                lower_dirs.push(lower);
             }
         }
 
@@ -90,29 +83,46 @@ fn execute_overlay(
     }
 
     // Phase 2: All staging succeeded — mount overlays.
+    // Lower dirs are partition-level (e.g., .../viperfxmod/system/) but mount points
+    // may be subdirectories (e.g., /system/etc). Append the relative suffix so overlay
+    // only exposes files belonging to that mount point.
     let mut results = Vec::new();
 
     for (pm, lower_dirs) in &staged {
+        let adjusted: Vec<PathBuf> = lower_dirs
+            .iter()
+            .map(|d| if pm.staging_rel.as_os_str().is_empty() { d.clone() } else { d.join(&pm.staging_rel) })
+            .filter(|d| d.exists())
+            .collect();
+
+        if adjusted.is_empty() {
+            continue;
+        }
+
         let lower_refs: Vec<&std::path::Path> =
-            lower_dirs.iter().map(|p| p.as_path()).collect();
-        let work = storage.work_dir(&pm.mount_point.to_string_lossy());
+            adjusted.iter().map(|p| p.as_path()).collect();
         let target = &pm.mount_point;
         let mount_id = pm.contributing_modules.join("+");
 
-        let result = mount_overlay(&lower_refs, &work, target, &mount_id, &storage.overlay_source)?;
-
-        if result.success {
-            if let Err(e) = nuke_backing_file(&storage.base_path) {
-                warn!(error = %e, "nuke backing file failed (non-fatal)");
+        let result = match mount_overlay(&lower_refs, target, &mount_id, &storage.overlay_source) {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(target = %target.display(), error = %e, "overlay mount failed");
+                MountResult {
+                    module_id: mount_id.clone(),
+                    strategy_used: MountStrategy::Overlay,
+                    success: false,
+                    rules_applied: 0,
+                    rules_failed: 1,
+                    error: Some(format!("{e}")),
+                    mount_paths: Vec::new(),
+                }
             }
-        }
-
+        };
         results.push(result);
     }
 
-    if let Err(e) = cleanup_storage(&mut storage) {
-        debug!(error = %e, "storage cleanup failed (non-fatal)");
-    }
+    storage.suppress_cleanup();
 
     info!(mounts = results.len(), "overlay execution complete");
     Ok(results)
@@ -151,9 +161,7 @@ fn execute_magic_mount(
         results.push(result);
     }
 
-    if let Err(e) = cleanup_storage(&mut storage) {
-        debug!(error = %e, "storage cleanup failed (non-fatal)");
-    }
+    storage.suppress_cleanup();
 
     info!(modules = results.len(), "magic mount execution complete");
     Ok(results)
@@ -189,13 +197,47 @@ fn prepare_lower_dir(
             crate::utils::selinux::mirror_selinux_context(&src, &dst);
         } else {
             if let Some(parent) = dst.parent() {
-                fs::create_dir_all(parent)?;
+                ensure_parent_dirs_with_context(lower_dir, parent, partition)?;
             }
             if src.exists() {
                 fs::copy(&src, &dst).with_context(|| {
                     format!("copy {} -> {}", src.display(), dst.display())
                 })?;
                 crate::utils::selinux::mirror_selinux_context(&src, &dst);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Create intermediate directories one level at a time, mirroring SELinux
+/// context from the real filesystem. Prevents tmpfs-default labels on dirs
+/// that overlayfs exposes in merged directory listings.
+fn ensure_parent_dirs_with_context(
+    lower_dir: &std::path::Path,
+    target_parent: &std::path::Path,
+    partition: &str,
+) -> Result<()> {
+    use std::fs;
+
+    let rel = match target_parent.strip_prefix(lower_dir) {
+        Ok(r) => r,
+        Err(_) => return Ok(()),
+    };
+
+    let mut current = lower_dir.to_path_buf();
+    let partition_root = PathBuf::from(format!("/{}", partition));
+
+    for component in rel.components() {
+        current.push(component);
+        if !current.exists() {
+            fs::create_dir_all(&current)?;
+            let real_path = partition_root.join(
+                current.strip_prefix(lower_dir).unwrap_or(Path::new("")),
+            );
+            if real_path.exists() {
+                crate::utils::selinux::mirror_selinux_context(&real_path, &current);
             }
         }
     }
