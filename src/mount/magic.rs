@@ -387,6 +387,7 @@ fn apply_node_recursive(
                         .with_context(|| format!("create mount point: {}", real_path.display()))?;
                 }
                 bind_mount(&module_path, real_path)?;
+                mount_private(real_path)?;
                 remount_readonly(real_path)?;
                 stats.mount_paths.push(real_path.to_string_lossy().to_string());
                 debug!(
@@ -493,6 +494,7 @@ fn apply_tmpfs_directory(
 
     // Self-bind to create independent mount point
     bind_mount(&wpath, &wpath)?;
+    mount_private(&wpath)?;
 
     // Mirror stock entries (unless this is a full replacement)
     if !node.replace {
@@ -651,12 +653,14 @@ fn mirror_stock_entries(real_path: &Path, wpath: &Path, node: &Node) -> Result<(
                 libc::chown(c_dst.as_ptr(), meta.uid(), meta.gid());
             }
             bind_mount_recursive(&src, &dst)?;
+            mount_private(&dst)?;
             copy_selinux_context(&src, &dst);
             debug!(name = %name_str, "mirrored directory via recursive bind");
         } else {
             fs::File::create(&dst)
                 .with_context(|| format!("touch mirror: {}", dst.display()))?;
             bind_mount(&src, &dst)?;
+            mount_private(&dst)?;
             copy_selinux_context(&src, &dst);
             debug!(name = %name_str, "mirrored file via bind mount");
         }
