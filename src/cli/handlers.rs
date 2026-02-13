@@ -478,6 +478,11 @@ fn wait_for_sdcard(timeout: Duration) -> bool {
 
     let deadline = Instant::now() + timeout;
     let result = loop {
+        if crate::utils::signal::shutdown_requested() {
+            debug!("shutdown requested, aborting sdcard wait");
+            break false;
+        }
+
         if sdcard_available() {
             break true;
         }
@@ -492,13 +497,20 @@ fn wait_for_sdcard(timeout: Duration) -> bool {
             events: libc::POLLIN,
             revents: 0,
         };
-        // 1s max poll — also serves as a safety recheck interval
         let timeout_ms = remaining.as_millis().min(1000) as i32;
-        unsafe { libc::poll(&mut pfd, 1, timeout_ms); }
+        let ret = unsafe { libc::poll(&mut pfd, 1, timeout_ms) };
+        if ret < 0 {
+            let err = std::io::Error::last_os_error();
+            if err.raw_os_error() != Some(libc::EINTR) {
+                warn!("poll error in sdcard wait: {err}");
+            }
+            continue;
+        }
 
-        // Drain events — we just recheck the target path
-        let mut buf = [0u8; 4096];
-        unsafe { libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()); }
+        if ret > 0 && (pfd.revents & libc::POLLIN) != 0 {
+            let mut buf = [0u8; 4096];
+            unsafe { libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()); }
+        }
     };
 
     unsafe { libc::close(fd); }
@@ -512,6 +524,9 @@ fn wait_for_sdcard(timeout: Duration) -> bool {
 fn poll_for_sdcard(timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
+        if crate::utils::signal::shutdown_requested() {
+            return false;
+        }
         if sdcard_available() {
             return true;
         }
