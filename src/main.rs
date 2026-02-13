@@ -43,6 +43,7 @@ fn main() -> Result<()> {
 
     let config = core::config::ZeroMountConfig::load(None)?;
     logging::init(cli.verbose, &config.logging)?;
+    utils::signal::register_shutdown_handler();
 
     match cli.command {
         Commands::Mount { post_boot, susfs_retry, wait } => {
