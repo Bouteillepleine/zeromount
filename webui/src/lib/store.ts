@@ -459,6 +459,7 @@ function createAppStore() {
       pushActivity('setting_changed', `Verbose logging → ${enabled ? 'ON' : 'OFF'}`);
     } catch (e) {
       console.error('[ZM-Store] setVerboseLogging() error:', e);
+      setSettings({ verboseLogging: !enabled });
       showToast('Failed to set verbose logging', 'error');
     }
   };

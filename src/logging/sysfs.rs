@@ -43,27 +43,41 @@ fn persist_verbose_config(enabled: bool) {
     }
 }
 
+fn try_write_sysfs(level: u32) -> &'static str {
+    if Path::new(SYSFS_DEBUG).exists() {
+        match write_kernel_debug_level(level) {
+            Ok(()) => "ok",
+            Err(e) => {
+                eprintln!("warning: sysfs write failed: {e}");
+                "error"
+            }
+        }
+    } else {
+        "n/a"
+    }
+}
+
 pub fn enable() -> Result<()> {
-    write_kernel_debug_level(1)?;
+    let sysfs = try_write_sysfs(1);
     set_verbose_marker(true)?;
     persist_verbose_config(true);
-    println!("logging enabled (sysfs=1, .verbose=present, config=true)");
+    println!("logging enabled (sysfs={sysfs}, .verbose=present, config=true)");
     Ok(())
 }
 
 pub fn disable() -> Result<()> {
-    write_kernel_debug_level(0)?;
+    let sysfs = try_write_sysfs(0);
     set_verbose_marker(false)?;
     persist_verbose_config(false);
-    println!("logging disabled (sysfs=0, .verbose=removed, config=false)");
+    println!("logging disabled (sysfs={sysfs}, .verbose=removed, config=false)");
     Ok(())
 }
 
 pub fn set_level(level: u32) -> Result<()> {
-    write_kernel_debug_level(level)?;
+    let sysfs = try_write_sysfs(level);
     set_verbose_marker(level > 0)?;
     persist_verbose_config(level > 0);
-    println!("debug level set to {level}");
+    println!("debug level set to {level} (sysfs={sysfs})");
     Ok(())
 }
 
