@@ -20,6 +20,37 @@ COUNT=$(cat /data/adb/zeromount/.bootcount 2>/dev/null || echo 0)
 
 "$BIN" mount --post-boot
 
+# Property spoofing — resetprop runs after pipeline, before deferred work
+spoof_props() {
+    ENABLED=$("$BIN" config get brene.prop_spoofing 2>/dev/null)
+    [ "$ENABLED" != "true" ] && return 0
+
+    if ! command -v resetprop >/dev/null 2>&1; then
+        echo "zeromount: resetprop not found, skipping prop spoofing" > /dev/kmsg 2>/dev/null
+        return 1
+    fi
+
+    set_prop() {
+        CURRENT=$(getprop "$1" 2>/dev/null)
+        if [ "$CURRENT" != "$2" ]; then
+            resetprop "$1" "$2"
+        fi
+    }
+
+    set_prop ro.debuggable 0
+    set_prop ro.secure 1
+    set_prop ro.build.type user
+    set_prop ro.build.tags release-keys
+    set_prop ro.boot.vbmeta.device_state locked
+    set_prop ro.boot.verifiedbootstate green
+    set_prop ro.boot.flash.locked 1
+    set_prop ro.boot.veritymode enforcing
+    set_prop ro.adb.secure 1
+
+    echo "zeromount: prop spoofing applied" > /dev/kmsg 2>/dev/null
+}
+spoof_props
+
 # Reset bootloop counter only after the system actually finishes booting.
 # Pipeline no longer resets it — catches post-pipeline deadlocks.
 (
