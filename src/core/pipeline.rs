@@ -181,6 +181,16 @@ impl MountController<Planned> {
         let config = &self.state.config;
         let user_override = config.user_strategy_override();
 
+        // Snapshot stock OEM overlays BEFORE we create our own mounts.
+        // After cleanup_previous_mounts() above, all remaining overlay
+        // mounts in mountinfo are pre-existing OEM stock (mi_ext, prism, etc).
+        let stock_overlays = if config.mount.hide_stock_overlays {
+            crate::mount::stock_overlays::collect_stock_overlays()
+        } else {
+            debug!("stock overlay hiding disabled in config");
+            Vec::new()
+        };
+
         let results = match scenario {
             // VFS-capable kernels: default VFS, user can override to overlay/magic
             Scenario::Full | Scenario::SusfsFrontend | Scenario::KernelOnly => {
@@ -258,6 +268,33 @@ impl MountController<Planned> {
             }
         } else {
             debug!("try_umount skipped: bare kernel overlay doesn't need hiding");
+        }
+
+        // Stock OEM overlays: hide via try_umount on SUSFS-capable scenarios only.
+        // On bare kernel, unmounting ~20 stock overlays in deny-list namespaces
+        // frees peer group IDs and creates detectable gaps with no SUSFS safety net.
+        if !stock_overlays.is_empty() {
+            if scenario != Scenario::None {
+                let stock_paths: Vec<String> = stock_overlays.iter()
+                    .map(|s| s.mount_point.clone())
+                    .collect();
+                debug!(
+                    count = stock_paths.len(),
+                    paths = ?stock_paths,
+                    "registering stock OEM overlays with try_umount"
+                );
+                let stats = crate::mount::try_umount::register_unmountable(
+                    &stock_paths,
+                    self.state.root_mgr.name(),
+                );
+                umount_registered += stats.registered;
+                umount_failed += stats.failed;
+            } else {
+                debug!(
+                    count = stock_overlays.len(),
+                    "stock OEM overlays collected but try_umount skipped on bare kernel"
+                );
+            }
         }
 
         if umount_registered > 0 || umount_failed > 0 {
