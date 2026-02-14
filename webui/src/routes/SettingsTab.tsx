@@ -324,10 +324,19 @@ export function SettingsTab() {
               options={[
                 { value: 'auto', label: 'Auto' },
                 { value: 'erofs', label: 'EROFS', disabled: !caps()?.erofs_supported },
-                { value: 'tmpfs', label: 'tmpfs' },
+                { value: 'tmpfs', label: 'tmpfs', disabled: !caps()?.tmpfs_xattr },
                 { value: 'ext4', label: 'ext4' },
               ]}
             />
+            <Show when={
+              store.resolvedStorageMode() &&
+              store.settings.mount.storage_mode !== 'auto' &&
+              store.resolvedStorageMode() !== store.settings.mount.storage_mode
+            }>
+              <div class="settings__item-desc" style={{ color: 'var(--warning)', "margin-top": "8px" }}>
+                {store.settings.mount.storage_mode} unavailable — resolved to {store.resolvedStorageMode()}
+              </div>
+            </Show>
           </div>
 
           <div class="settings__item">

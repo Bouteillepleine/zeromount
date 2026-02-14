@@ -657,6 +657,7 @@ impl MountController<Mounted> {
             degraded,
             degradation_reason,
             root_manager: Some(self.state.root_mgr.name().to_string()),
+            resolved_storage_mode: crate::mount::storage::get_resolved_storage_mode(),
         }
     }
 }

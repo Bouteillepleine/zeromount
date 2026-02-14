@@ -72,6 +72,7 @@ export interface RuntimeStatus {
   degradation_reason: string | null;
   root_manager: string | null;
   mount_source: string | null;
+  resolved_storage_mode: string | null;
 }
 
 export interface KsuModule {

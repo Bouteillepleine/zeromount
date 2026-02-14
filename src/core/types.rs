@@ -186,6 +186,8 @@ pub struct RuntimeState {
     pub degraded: bool,
     pub degradation_reason: Option<String>,
     pub root_manager: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_storage_mode: Option<String>,
 }
 
 impl Default for RuntimeState {
@@ -207,6 +209,7 @@ impl Default for RuntimeState {
             degraded: false,
             degradation_reason: None,
             root_manager: None,
+            resolved_storage_mode: None,
         }
     }
 }

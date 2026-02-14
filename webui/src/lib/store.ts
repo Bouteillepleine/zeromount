@@ -57,6 +57,7 @@ function createAppStore() {
   const [rootManager, setRootManager] = createSignal<string | null>(null);
   const [runtimeStrategy, setRuntimeStrategy] = createSignal<MountStrategy | null>(null);
   const [mountSource, _setMountSource] = createSignal<string | null>(null);
+  const [resolvedStorageMode, setResolvedStorageMode] = createSignal<string | null>(null);
   const [lastApiError, setLastApiError] = createSignal<{ operation: string; error: unknown; timestamp: Date } | null>(null);
 
   const savedTheme = typeof window !== 'undefined'
@@ -254,6 +255,7 @@ function createAppStore() {
         setRootManager(status.root_manager);
         setRuntimeStrategy(status.active_strategy ?? null);
         _setMountSource(status.mount_source ?? null);
+        setResolvedStorageMode(status.resolved_storage_mode ?? null);
         setStats({
           activeRules: status.rule_count,
           excludedUids: status.excluded_uid_count,
@@ -838,6 +840,7 @@ function createAppStore() {
       setRootManager(status.root_manager);
       setRuntimeStrategy(status.active_strategy ?? null);
       _setMountSource(status.mount_source ?? null);
+      setResolvedStorageMode(status.resolved_storage_mode ?? null);
 
       if (status.engine_active !== null) {
         setEngineActive(status.engine_active);
@@ -1074,6 +1077,7 @@ function createAppStore() {
     rootManager,
     runtimeStrategy,
     mountSource,
+    resolvedStorageMode,
     settings,
     currentTheme,
     toast,

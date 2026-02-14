@@ -25,6 +25,24 @@ pub enum StorageMode {
     Ext4,
 }
 
+impl StorageMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Erofs => "erofs",
+            Self::Tmpfs => "tmpfs",
+            Self::Ext4 => "ext4",
+        }
+    }
+}
+
+use std::sync::Mutex;
+
+static LAST_RESOLVED: Mutex<Option<String>> = Mutex::new(None);
+
+pub fn get_resolved_storage_mode() -> Option<String> {
+    LAST_RESOLVED.lock().ok().and_then(|m| m.clone())
+}
+
 /// Handle to a prepared storage area. Drop-safe: cleanup on drop.
 #[derive(Debug)]
 pub struct StorageHandle {
@@ -91,25 +109,27 @@ pub fn init_storage(capabilities: &CapabilityFlags, mount_config: &MountConfig) 
     fs::create_dir_all(&base_path)
         .with_context(|| format!("cannot create staging dir: {}", base_path.display()))?;
 
+    let requested = format!("{:?}", mount_config.storage_mode).to_lowercase();
+
     // If user forced a specific mode, try it first
     match mount_config.storage_mode {
         ConfigStorageMode::Erofs => {
             if let Some(mut handle) = try_mode_erofs(&base_path, capabilities) {
                 handle.overlay_source = overlay_source;
-                return Ok(handle);
+                return Ok(record_resolved(handle, &requested));
             }
             warn!("forced EROFS failed, falling back to cascade");
         }
         ConfigStorageMode::Tmpfs => {
             if let Some(mut handle) = try_mode_tmpfs(&base_path, capabilities, &staging_source) {
                 handle.overlay_source = overlay_source;
-                return Ok(handle);
+                return Ok(record_resolved(handle, &requested));
             }
             warn!("forced tmpfs failed, falling back to cascade");
         }
         ConfigStorageMode::Ext4 => {
             if let Some(handle) = try_mode_ext4(&base_path, &overlay_source) {
-                return Ok(handle);
+                return Ok(record_resolved(handle, &requested));
             }
             warn!("forced ext4 failed, falling back to cascade");
         }
@@ -119,14 +139,14 @@ pub fn init_storage(capabilities: &CapabilityFlags, mount_config: &MountConfig) 
     // Cascade: EROFS -> tmpfs+xattr -> ext4 -> bare tmpfs
     if let Some(mut handle) = try_mode_erofs(&base_path, capabilities) {
         handle.overlay_source = overlay_source;
-        return Ok(handle);
+        return Ok(record_resolved(handle, &requested));
     }
     if let Some(mut handle) = try_mode_tmpfs(&base_path, capabilities, &staging_source) {
         handle.overlay_source = overlay_source;
-        return Ok(handle);
+        return Ok(record_resolved(handle, &requested));
     }
     if let Some(handle) = try_mode_ext4(&base_path, &overlay_source) {
-        return Ok(handle);
+        return Ok(record_resolved(handle, &requested));
     }
 
     // Bare tmpfs fallback (no xattr guarantee)
@@ -138,13 +158,29 @@ pub fn init_storage(capabilities: &CapabilityFlags, mount_config: &MountConfig) 
             warn!(error = %e, "all storage mounts failed, using bare directory");
         }
     }
-    Ok(StorageHandle {
+    let handle = StorageHandle {
         mode: StorageMode::Tmpfs,
         base_path,
         cleaned_up: false,
         overlay_source,
         apex_mounts: None,
-    })
+    };
+    Ok(record_resolved(handle, &requested))
+}
+
+fn record_resolved(handle: StorageHandle, requested: &str) -> StorageHandle {
+    let resolved = handle.mode.as_str();
+    if requested != "auto" && requested != resolved {
+        warn!(
+            requested,
+            resolved,
+            "storage cascade: user choice unavailable"
+        );
+    }
+    if let Ok(mut lock) = LAST_RESOLVED.lock() {
+        *lock = Some(resolved.to_string());
+    }
+    handle
 }
 
 fn try_mode_erofs(base_path: &Path, capabilities: &CapabilityFlags) -> Option<StorageHandle> {
