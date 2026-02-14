@@ -311,6 +311,23 @@ impl MountController<Planned> {
             );
         }
 
+        // Shadow bind mounts preserve peer group IDs in app namespaces.
+        // KSU's deny-list cleanup may remove mounts beyond our registered
+        // paths. Shadows ensure peer groups survive in app namespaces.
+        if !non_vfs_paths.is_empty() {
+            crate::mount::gap_filler::preserve_mount_peer_groups(&non_vfs_paths);
+        }
+
+        // Also preserve stock OEM overlay peer groups on bare kernel.
+        // We skip try_umount registration for them, but KSU's deny-list
+        // namespace cleanup may still remove them from app namespaces.
+        if !stock_overlays.is_empty() && scenario == Scenario::None {
+            let stock_paths: Vec<String> = stock_overlays.iter()
+                .map(|s| s.mount_point.clone())
+                .collect();
+            crate::mount::gap_filler::preserve_mount_peer_groups(&stock_paths);
+        }
+
         // Post-mount gap fill catches any new gaps from mount creation itself
         // (e.g., if a cleanup freed IDs between pre-fill and mount).
         let post_filled = crate::mount::gap_filler::fill_peer_group_gaps();

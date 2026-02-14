@@ -118,6 +118,112 @@ fn create_shared_filler(path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
+/// Bind-mount each try_umount-registered path to a hidden location so the
+/// peer group ID survives in app namespaces after try_umount removes the
+/// original. Without this, magic mount's MS_MOVE destroys stock overlays
+/// and try_umount then removes our tmpfs — the peer group vanishes entirely.
+pub fn preserve_mount_peer_groups(mount_paths: &[String]) -> u32 {
+    let content = match fs::read_to_string("/proc/self/mountinfo") {
+        Ok(c) => c,
+        Err(e) => {
+            debug!(error = %e, "mountinfo read failed for peer group preservation");
+            return 0;
+        }
+    };
+
+    let shadow_base = PathBuf::from("/mnt/.pg");
+    if let Err(e) = fs::create_dir_all(&shadow_base) {
+        debug!(error = %e, "failed to create shadow mount base");
+        return 0;
+    }
+
+    let mut preserved = 0u32;
+    let mut seen_groups = BTreeSet::new();
+
+    for line in content.lines() {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 5 {
+            continue;
+        }
+        let mount_point = fields[4];
+        if !mount_paths.iter().any(|p| p == mount_point) {
+            continue;
+        }
+
+        let peer_group = fields.iter()
+            .find_map(|f| f.strip_prefix("shared:"))
+            .and_then(|s| s.parse::<u32>().ok());
+
+        let Some(pg) = peer_group else { continue };
+        if !seen_groups.insert(pg) {
+            continue;
+        }
+
+        let shadow_path = shadow_base.join(format!("{pg}"));
+
+        let is_dir = fs::metadata(mount_point).map(|m| m.is_dir()).unwrap_or(true);
+        if is_dir {
+            if let Err(e) = fs::create_dir_all(&shadow_path) {
+                debug!(peer_group = pg, error = %e, "shadow dir creation failed");
+                continue;
+            }
+        } else {
+            if let Some(parent) = shadow_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if let Err(e) = fs::File::create(&shadow_path) {
+                debug!(peer_group = pg, error = %e, "shadow file creation failed");
+                continue;
+            }
+        }
+
+        let c_src = match CString::new(mount_point) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let c_dst = match CString::new(shadow_path.as_os_str().as_encoded_bytes()) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+
+        let ret = unsafe {
+            libc::mount(
+                c_src.as_ptr(),
+                c_dst.as_ptr(),
+                std::ptr::null(),
+                libc::MS_BIND,
+                std::ptr::null(),
+            )
+        };
+
+        if ret != 0 {
+            let err = std::io::Error::last_os_error();
+            debug!(peer_group = pg, path = mount_point, error = %err, "shadow bind mount failed");
+            let _ = fs::remove_dir(&shadow_path);
+            continue;
+        }
+
+        // Read-only to minimize exposure
+        unsafe {
+            libc::mount(
+                std::ptr::null(),
+                c_dst.as_ptr(),
+                std::ptr::null(),
+                libc::MS_REMOUNT | libc::MS_BIND | libc::MS_RDONLY,
+                std::ptr::null(),
+            );
+        }
+
+        debug!(peer_group = pg, path = mount_point, shadow = %shadow_path.display(), "peer group preserved");
+        preserved += 1;
+    }
+
+    if preserved > 0 {
+        info!(preserved, "mount peer groups preserved via shadow bind mounts");
+    }
+    preserved
+}
+
 /// Log peer group IDs assigned to our mount paths for diagnostics.
 /// Helps verify that pre-mount gap filling pushed our IDs to end-of-range.
 pub fn log_mount_peer_groups(mount_paths: &[String]) {
