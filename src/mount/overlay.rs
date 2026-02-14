@@ -195,9 +195,10 @@ fn mount_overlay_new_api(lowerdir: &str, target: &Path, overlay_source: &str) ->
             bail!("fsconfig(CMD_CREATE): {}", std::io::Error::last_os_error());
         }
 
-        // fsmount(fs_fd, FSMOUNT_CLOEXEC, 0)
+        // fsmount(fs_fd, FSMOUNT_CLOEXEC, MOUNT_ATTR_RDONLY)
+        // MOUNT_ATTR_RDONLY = 0x1: match stock overlay VFS flags (ro,relatime)
         let mnt_fd = unsafe {
-            libc::syscall(syscall_nr::SYS_FSMOUNT, fs_fd, 0x00000001u32, 0u32)
+            libc::syscall(syscall_nr::SYS_FSMOUNT, fs_fd, 0x00000001u32, 0x00000001u32)
         };
         if mnt_fd < 0 {
             bail!("fsmount: {}", std::io::Error::last_os_error());
@@ -271,7 +272,7 @@ fn mount_overlay_legacy(lowerdir: &str, target: &Path, overlay_source: &str) -> 
             c_source.as_ptr(),
             c_target.as_ptr(),
             c_fstype.as_ptr(),
-            0,
+            libc::MS_RDONLY,
             c_data.as_ptr() as *const libc::c_void,
         )
     };

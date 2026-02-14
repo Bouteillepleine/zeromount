@@ -75,6 +75,8 @@ impl StorageHandle {
             let _ = do_umount(versioned);
         }
         let _ = do_umount(&self.base_path);
+        // Remove empty staging directory so /mnt/ looks stock
+        let _ = std::fs::remove_dir(&self.base_path);
         self.cleaned_up = true;
     }
 }

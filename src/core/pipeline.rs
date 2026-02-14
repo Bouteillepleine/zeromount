@@ -182,24 +182,6 @@ impl MountController<Planned> {
         let user_override = config.user_strategy_override();
 
         // Snapshot stock OEM overlays BEFORE we create our own mounts.
-        // After cleanup_previous_mounts() above, all remaining overlay
-        // mounts in mountinfo are pre-existing OEM stock (mi_ext, prism, etc).
-        let stock_overlays = if config.mount.hide_stock_overlays {
-            crate::mount::stock_overlays::collect_stock_overlays()
-        } else {
-            debug!("stock overlay hiding disabled in config");
-            Vec::new()
-        };
-
-        // Fill peer group gaps BEFORE creating our mounts so the IDR allocator
-        // assigns our overlays IDs at the END of the contiguous range. When
-        // try_umount removes them from app namespaces, the range shortens
-        // without creating mid-range holes detectable by Native Detector.
-        let pre_filled = crate::mount::gap_filler::fill_peer_group_gaps();
-        if pre_filled > 0 {
-            info!(filled = pre_filled, "pre-mount peer group gaps filled");
-        }
-
         let results = match scenario {
             // VFS-capable kernels: default VFS, user can override to overlay/magic
             Scenario::Full | Scenario::SusfsFrontend | Scenario::KernelOnly => {
@@ -252,9 +234,8 @@ impl MountController<Planned> {
         let mut umount_registered = 0u32;
         let mut umount_failed = 0u32;
 
-        // try_umount is KSU core (ioctl 0x4000_4B12), works on ALL KSU kernels
-        // regardless of SUSFS. Register our mount paths unconditionally so
-        // deny-list apps see stock mounts. gap_filler handles peer group gaps.
+        // try_umount is KSU core (ioctl 0x4000_4B12), works on ALL KSU kernels.
+        // Register our mount paths so deny-list apps see stock mounts only.
         let mut non_vfs_paths: Vec<String> = results.iter()
             .filter(|r| r.success && !matches!(r.strategy_used, MountStrategy::Vfs | MountStrategy::Font))
             .flat_map(|r| r.mount_paths.iter().cloned())
@@ -275,34 +256,6 @@ impl MountController<Planned> {
             umount_failed += stats.failed;
         }
 
-        // Stock OEM overlays: only register on SUSFS-capable kernels.
-        // On bare kernel, try_umount removes them from app namespaces but
-        // the freed peer group IDs create gaps detectable by Native Detector.
-        // SUSFS hides these gaps; without it, leave stock overlays alone.
-        if !stock_overlays.is_empty() {
-            if scenario != Scenario::None {
-                let stock_paths: Vec<String> = stock_overlays.iter()
-                    .map(|s| s.mount_point.clone())
-                    .collect();
-                debug!(
-                    count = stock_paths.len(),
-                    paths = ?stock_paths,
-                    "registering stock OEM overlays with try_umount"
-                );
-                let stats = crate::mount::try_umount::register_unmountable(
-                    &stock_paths,
-                    self.state.root_mgr.name(),
-                );
-                umount_registered += stats.registered;
-                umount_failed += stats.failed;
-            } else {
-                debug!(
-                    count = stock_overlays.len(),
-                    "stock OEM overlays skipped on bare kernel (peer group gap risk)"
-                );
-            }
-        }
-
         if umount_registered > 0 || umount_failed > 0 {
             info!(
                 registered = umount_registered,
@@ -311,34 +264,10 @@ impl MountController<Planned> {
             );
         }
 
-        // Shadow bind mounts preserve peer group IDs in app namespaces.
-        // KSU's deny-list cleanup may remove mounts beyond our registered
-        // paths. Shadows ensure peer groups survive in app namespaces.
-        if !non_vfs_paths.is_empty() {
-            crate::mount::gap_filler::preserve_mount_peer_groups(&non_vfs_paths);
-        }
-
-        // Also preserve stock OEM overlay peer groups on bare kernel.
-        // We skip try_umount registration for them, but KSU's deny-list
-        // namespace cleanup may still remove them from app namespaces.
-        if !stock_overlays.is_empty() && scenario == Scenario::None {
-            let stock_paths: Vec<String> = stock_overlays.iter()
-                .map(|s| s.mount_point.clone())
-                .collect();
-            crate::mount::gap_filler::preserve_mount_peer_groups(&stock_paths);
-        }
-
-        // Post-mount gap fill catches any new gaps from mount creation itself
-        // (e.g., if a cleanup freed IDs between pre-fill and mount).
-        let post_filled = crate::mount::gap_filler::fill_peer_group_gaps();
-        if post_filled > 0 {
-            info!(filled = post_filled, "post-mount peer group gaps filled");
-        }
-
-        // Log peer group IDs of our mounts for diagnostics
-        if !non_vfs_paths.is_empty() {
-            crate::mount::gap_filler::log_mount_peer_groups(&non_vfs_paths);
-        }
+        // NOTE: gap_filler (peer group gap filling + shadow bind mounts) and
+        // stock OEM overlay try_umount registration archived — both created
+        // unhidden mounts visible in app namespaces that NativeTest detects.
+        // See gap_filler.rs and stock_overlays.rs for the preserved code.
 
         // Per-module SUSFS kstat spoofing for non-VFS strategies (font kstat, etc.)
         let has_non_vfs = results.iter().any(|r| {
