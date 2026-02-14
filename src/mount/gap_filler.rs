@@ -118,6 +118,53 @@ fn create_shared_filler(path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
+/// Log peer group IDs assigned to our mount paths for diagnostics.
+/// Helps verify that pre-mount gap filling pushed our IDs to end-of-range.
+pub fn log_mount_peer_groups(mount_paths: &[String]) {
+    let content = match fs::read_to_string("/proc/self/mountinfo") {
+        Ok(c) => c,
+        Err(e) => {
+            debug!(error = %e, "mountinfo read failed for peer group logging");
+            return;
+        }
+    };
+
+    let all_ids = match parse_shared_peer_ids() {
+        Ok(ids) => ids,
+        Err(_) => BTreeSet::new(),
+    };
+    let max_id = all_ids.iter().next_back().copied().unwrap_or(0);
+
+    for line in content.lines() {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 5 {
+            continue;
+        }
+        let mount_point = fields[4];
+        if !mount_paths.iter().any(|p| p == mount_point) {
+            continue;
+        }
+        for field in &fields {
+            if let Some(id_str) = field.strip_prefix("shared:") {
+                if let Ok(id) = id_str.parse::<u32>() {
+                    let position = if id >= max_id - mount_paths.len() as u32 {
+                        "end-of-range"
+                    } else {
+                        "mid-range"
+                    };
+                    info!(
+                        path = mount_point,
+                        peer_group = id,
+                        max_peer_group = max_id,
+                        position,
+                        "mount peer group assigned"
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

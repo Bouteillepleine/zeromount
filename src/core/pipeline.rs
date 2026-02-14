@@ -191,6 +191,15 @@ impl MountController<Planned> {
             Vec::new()
         };
 
+        // Fill peer group gaps BEFORE creating our mounts so the IDR allocator
+        // assigns our overlays IDs at the END of the contiguous range. When
+        // try_umount removes them from app namespaces, the range shortens
+        // without creating mid-range holes detectable by Native Detector.
+        let pre_filled = crate::mount::gap_filler::fill_peer_group_gaps();
+        if pre_filled > 0 {
+            info!(filled = pre_filled, "pre-mount peer group gaps filled");
+        }
+
         let results = match scenario {
             // VFS-capable kernels: default VFS, user can override to overlay/magic
             Scenario::Full | Scenario::SusfsFrontend | Scenario::KernelOnly => {
@@ -302,7 +311,17 @@ impl MountController<Planned> {
             );
         }
 
-        crate::mount::gap_filler::fill_peer_group_gaps();
+        // Post-mount gap fill catches any new gaps from mount creation itself
+        // (e.g., if a cleanup freed IDs between pre-fill and mount).
+        let post_filled = crate::mount::gap_filler::fill_peer_group_gaps();
+        if post_filled > 0 {
+            info!(filled = post_filled, "post-mount peer group gaps filled");
+        }
+
+        // Log peer group IDs of our mounts for diagnostics
+        if !non_vfs_paths.is_empty() {
+            crate::mount::gap_filler::log_mount_peer_groups(&non_vfs_paths);
+        }
 
         // Per-module SUSFS kstat spoofing for non-VFS strategies (font kstat, etc.)
         let has_non_vfs = results.iter().any(|r| {
