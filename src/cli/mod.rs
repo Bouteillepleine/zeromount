@@ -17,9 +17,6 @@ pub struct Cli {
 pub enum Commands {
     /// Full mount pipeline (called by metamount.sh)
     Mount {
-        /// Run post-boot tasks instead of mount pipeline (called by service.sh)
-        #[arg(long)]
-        post_boot: bool,
         /// Retry SUSFS path hiding after sdcard decryption
         #[arg(long)]
         susfs_retry: bool,

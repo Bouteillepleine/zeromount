@@ -6,7 +6,7 @@ use tracing::{debug, warn};
 
 use super::{ConfigAction, LogAction, ModuleAction, UidAction, VfsAction};
 
-pub fn handle_mount(post_boot: bool) -> Result<()> {
+pub fn handle_mount() -> Result<()> {
     let _lock = match crate::utils::lock::acquire_instance_lock()? {
         Some(guard) => guard,
         None => {
@@ -14,22 +14,6 @@ pub fn handle_mount(post_boot: bool) -> Result<()> {
             return Ok(());
         }
     };
-
-    if post_boot {
-        tracing::info!("post-boot tasks started");
-
-        let config = crate::core::config::ZeroMountConfig::load(None)?;
-        let state = crate::core::pipeline::run_pipeline_with_bootloop_guard(config)?;
-        tracing::info!(
-            scenario = ?state.scenario,
-            rules = state.rule_count,
-            modules = state.modules.len(),
-            degraded = state.degraded,
-            "pipeline finished"
-        );
-
-        return Ok(());
-    }
 
     tracing::info!("mount pipeline started");
 

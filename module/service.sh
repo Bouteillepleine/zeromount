@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# Deferred post-boot tasks only — mount pipeline runs in metamount.sh.
 MODDIR="${0%/*}"
 
 # Single-instance guard
@@ -10,17 +11,10 @@ echo $$ > "$LOCKFILE"
 trap 'kill 0 2>/dev/null; rm -f "$LOCKFILE"' EXIT
 trap 'exit 0' INT TERM
 
-# Shell fast-fail on bootloop
-COUNT=$(cat /data/adb/zeromount/.bootcount 2>/dev/null || echo 0)
-[ "$COUNT" -ge 3 ] && { echo "zeromount: bootloop guard triggered (count=$COUNT), skipping pipeline" > /dev/kmsg 2>/dev/null; exit 0; }
-
 . "$MODDIR/common.sh"
 [ -z "$ABI" ] && exit 1
 [ -x "$BIN" ] || exit 1
 
-"$BIN" mount --post-boot
-
-# Property spoofing — resetprop runs after pipeline, before deferred work
 spoof_props() {
     ENABLED=$("$BIN" config get brene.prop_spoofing 2>/dev/null)
     [ "$ENABLED" != "true" ] && return 0
@@ -51,8 +45,7 @@ spoof_props() {
 }
 spoof_props
 
-# Reset bootloop counter only after the system actually finishes booting.
-# Pipeline no longer resets it — catches post-pipeline deadlocks.
+# Reset bootloop counter only after the system actually finishes booting
 (
     trap 'exit 0' TERM INT
     i=0

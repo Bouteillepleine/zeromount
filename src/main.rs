@@ -46,11 +46,11 @@ fn main() -> Result<()> {
     utils::signal::register_shutdown_handler();
 
     match cli.command {
-        Commands::Mount { post_boot, susfs_retry, wait } => {
+        Commands::Mount { susfs_retry, wait } => {
             if susfs_retry {
                 cli::handlers::handle_susfs_retry(wait)
             } else {
-                cli::handlers::handle_mount(post_boot)
+                cli::handlers::handle_mount()
             }
         }
         Commands::Detect => cli::handlers::handle_detect(),
