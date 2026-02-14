@@ -243,36 +243,33 @@ impl MountController<Planned> {
         let mut umount_registered = 0u32;
         let mut umount_failed = 0u32;
 
-        // Bare kernel: lowerdir-only overlays don't need try_umount hiding.
-        // Registering them is counterproductive — unmounting in deny-list
-        // namespaces releases peer group IDs, creating detectable gaps.
-        if scenario != Scenario::None {
-            let mut non_vfs_paths: Vec<String> = results.iter()
-                .filter(|r| r.success && !matches!(r.strategy_used, MountStrategy::Vfs | MountStrategy::Font))
-                .flat_map(|r| r.mount_paths.iter().cloned())
-                .collect();
-            non_vfs_paths.sort_unstable();
-            non_vfs_paths.dedup();
-            debug!(
-                count = non_vfs_paths.len(),
-                paths = ?non_vfs_paths,
-                "try_umount paths collected (deduped)"
+        // try_umount is KSU core (ioctl 0x4000_4B12), works on ALL KSU kernels
+        // regardless of SUSFS. Register our mount paths unconditionally so
+        // deny-list apps see stock mounts. gap_filler handles peer group gaps.
+        let mut non_vfs_paths: Vec<String> = results.iter()
+            .filter(|r| r.success && !matches!(r.strategy_used, MountStrategy::Vfs | MountStrategy::Font))
+            .flat_map(|r| r.mount_paths.iter().cloned())
+            .collect();
+        non_vfs_paths.sort_unstable();
+        non_vfs_paths.dedup();
+        debug!(
+            count = non_vfs_paths.len(),
+            paths = ?non_vfs_paths,
+            "try_umount paths collected (deduped)"
+        );
+        if !non_vfs_paths.is_empty() {
+            let stats = crate::mount::try_umount::register_unmountable(
+                &non_vfs_paths,
+                self.state.root_mgr.name(),
             );
-            if !non_vfs_paths.is_empty() {
-                let stats = crate::mount::try_umount::register_unmountable(
-                    &non_vfs_paths,
-                    self.state.root_mgr.name(),
-                );
-                umount_registered += stats.registered;
-                umount_failed += stats.failed;
-            }
-        } else {
-            debug!("try_umount skipped: bare kernel overlay doesn't need hiding");
+            umount_registered += stats.registered;
+            umount_failed += stats.failed;
         }
 
-        // Stock OEM overlays: hide via try_umount on SUSFS-capable scenarios only.
-        // On bare kernel, unmounting ~20 stock overlays in deny-list namespaces
-        // frees peer group IDs and creates detectable gaps with no SUSFS safety net.
+        // Stock OEM overlays: only register on SUSFS-capable kernels.
+        // On bare kernel, try_umount removes them from app namespaces but
+        // the freed peer group IDs create gaps detectable by Native Detector.
+        // SUSFS hides these gaps; without it, leave stock overlays alone.
         if !stock_overlays.is_empty() {
             if scenario != Scenario::None {
                 let stock_paths: Vec<String> = stock_overlays.iter()
@@ -292,7 +289,7 @@ impl MountController<Planned> {
             } else {
                 debug!(
                     count = stock_overlays.len(),
-                    "stock OEM overlays collected but try_umount skipped on bare kernel"
+                    "stock OEM overlays skipped on bare kernel (peer group gap risk)"
                 );
             }
         }
