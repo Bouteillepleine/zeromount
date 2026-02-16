@@ -322,16 +322,6 @@ else
     echo "[=] spoofed_size format specifier already correct"
 fi
 
-# --- 9. Null guards for susfs_is_base_dentry_* (prevents kernel panic on null base) ---
-if grep -q 'return (base->d_inode->i_mapping->flags & BIT_ANDROID_DATA_ROOT_DIR)' "$SUSFS_C"; then
-    echo "[+] Adding null guards to susfs_is_base_dentry functions"
-    sed -i 's/return (base->d_inode->i_mapping->flags & BIT_ANDROID_DATA_ROOT_DIR);/return (base \&\& !IS_ERR(base) \&\& base->d_inode \&\& (base->d_inode->i_mapping->flags \& BIT_ANDROID_DATA_ROOT_DIR));/' "$SUSFS_C"
-    sed -i 's/return (base->d_inode->i_mapping->flags & BIT_ANDROID_SDCARD_ROOT_DIR);/return (base \&\& !IS_ERR(base) \&\& base->d_inode \&\& (base->d_inode->i_mapping->flags \& BIT_ANDROID_SDCARD_ROOT_DIR));/' "$SUSFS_C"
-    ((fix_count++)) || true
-else
-    echo "[=] susfs_is_base_dentry null guards already present"
-fi
-
 # --- 10. Remove EACCES permission leak from SUS_PATH in GKI patch ---
 # Older upstream versions return ERR_PTR(-EACCES) on create/excl lookups,
 # which leaks SUSFS presence to detector apps. Replace with blank lines
