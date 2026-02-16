@@ -312,6 +312,30 @@ mod tests {
     }
 
     #[test]
+    fn kstat_redirect_layout() {
+        // C: char[256] + char[256] + unsigned long (8) + unsigned long (8)
+        //    + unsigned int (4) + pad(4) + long long (8) + long*6 (48)
+        //    + unsigned long (8) + unsigned long long (8) + int (4) + pad(4) = 616
+        assert_eq!(mem::size_of::<StSusfsSusKstatRedirect>(), 616);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, virtual_pathname), 0);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, real_pathname), 256);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, spoofed_ino), 512);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, spoofed_dev), 520);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, spoofed_nlink), 528);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, _pad0), 532);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, spoofed_size), 536);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, spoofed_atime_tv_sec), 544);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, spoofed_mtime_tv_sec), 552);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, spoofed_ctime_tv_sec), 560);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, spoofed_atime_tv_nsec), 568);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, spoofed_mtime_tv_nsec), 576);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, spoofed_ctime_tv_nsec), 584);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, spoofed_blksize), 592);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, spoofed_blocks), 600);
+        assert_eq!(mem::offset_of!(StSusfsSusKstatRedirect, err), 608);
+    }
+
+    #[test]
     fn magic_constants() {
         assert_eq!(KSU_INSTALL_MAGIC1, 0xDEADBEEF);
         assert_eq!(SUSFS_MAGIC, 0xFAFAFAFA);

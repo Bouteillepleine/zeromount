@@ -142,10 +142,10 @@ void susfs_add_sus_kstat_redirect(void __user **user_info) {\
 \n\tSUSFS_LOGI("kstat_redirect: ENTRY vpath='"'"'%s'"'"' rpath='"'"'%s'"'"'\\n",\
 \t           info.virtual_pathname, info.real_pathname);\
 \tif (!kern_path(info.virtual_pathname, 0, &p_virtual)) {\
-\t\tinode_virtual = d_inode(p_virtual.dentry);\
+\t\tinode_virtual = d_backing_inode(p_virtual.dentry);\
 \t\tif (inode_virtual) {\
 \t\t\tvirtual_ino = inode_virtual->i_ino;\
-\t\t\tif (!(inode_virtual->i_mapping->flags & BIT_SUS_KSTAT)) {\
+\t\t\tif (!test_bit(AS_FLAGS_SUS_KSTAT, &inode_virtual->i_mapping->flags)) {\
 \t\t\t\tspin_lock(&inode_virtual->i_lock);\
 \t\t\t\tset_bit(AS_FLAGS_SUS_KSTAT, &inode_virtual->i_mapping->flags);\
 \t\t\t\tspin_unlock(&inode_virtual->i_lock);\
@@ -165,7 +165,7 @@ void susfs_add_sus_kstat_redirect(void __user **user_info) {\
 \t\tkfree(new_entry);\
 \t\tgoto out_copy_to_user;\
 \t}\
-\n\tinode_real = d_inode(p_real.dentry);\
+\n\tinode_real = d_backing_inode(p_real.dentry);\
 \tif (!inode_real) {\
 \t\tpath_put(&p_real);\
 \t\tkfree(new_entry);\
@@ -173,7 +173,7 @@ void susfs_add_sus_kstat_redirect(void __user **user_info) {\
 \t\tinfo.err = -EINVAL;\
 \t\tgoto out_copy_to_user;\
 \t}\
-\n\tif (!(inode_real->i_mapping->flags & BIT_SUS_KSTAT)) {\
+\n\tif (!test_bit(AS_FLAGS_SUS_KSTAT, &inode_real->i_mapping->flags)) {\
 \t\tspin_lock(&inode_real->i_lock);\
 \t\tset_bit(AS_FLAGS_SUS_KSTAT, &inode_real->i_mapping->flags);\
 \t\tspin_unlock(&inode_real->i_lock);\

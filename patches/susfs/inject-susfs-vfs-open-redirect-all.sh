@@ -52,9 +52,9 @@ else
     echo "[+] Replacing do_filp_open redirect block with two-branch check"
 
     if [ "$NAMEIDATA_ARGS" -eq 4 ]; then
-        SET_ND='set_nameidata(\&nd, dfd, fake_pathname, NULL);'
+        SET_ND='set_nameidata(&nd, dfd, fake_pathname, NULL);'
     else
-        SET_ND='set_nameidata(\&nd, dfd, fake_pathname);'
+        SET_ND='set_nameidata(&nd, dfd, fake_pathname);'
     fi
 
     # Upstream GKI patches use test_bit(AS_FLAGS_OPEN_REDIRECT, ...) — match both patterns

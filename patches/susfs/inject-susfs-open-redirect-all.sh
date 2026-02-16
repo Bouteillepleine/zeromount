@@ -51,7 +51,7 @@ if grep -q 'BIT_OPEN_REDIRECT_ALL' "$SUSFS_DEF_H"; then
     echo "[=] BIT_OPEN_REDIRECT_ALL already present in susfs_def.h"
 else
     echo "[+] Injecting BIT_OPEN_REDIRECT_ALL into susfs_def.h"
-    sed -i '/^#define BIT_SUS_MAPS/a #define BIT_OPEN_REDIRECT_ALL BIT(40)' "$SUSFS_DEF_H"
+    sed -i '/^#define AS_FLAGS_OPEN_REDIRECT_ALL/a #define BIT_OPEN_REDIRECT_ALL BIT(40)' "$SUSFS_DEF_H"
     ((inject_count++)) || true
 fi
 
@@ -143,7 +143,7 @@ static int susfs_update_open_redirect_all_inode(struct st_susfs_open_redirect_al
 \t\tSUSFS_LOGE("Failed opening file '"'"'%s'"'"'\\n", new_entry->target_pathname);\
 \t\treturn err;\
 \t}\
-\n\tinode_target = d_inode(path_target.dentry);\
+\n\tinode_target = d_backing_inode(path_target.dentry);\
 \tif (!inode_target) {\
 \t\tSUSFS_LOGE("inode_target is NULL\\n");\
 \t\terr = -EINVAL;\
