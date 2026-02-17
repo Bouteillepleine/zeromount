@@ -538,19 +538,62 @@ export function StatusTab() {
                 INFO
               </span>
               <span class="status-health__title color-text-primary">
-                System
+                SUSFS
               </span>
             </div>
             <div class="status-health__message color-text-secondary">
               {store.settings.susfs.enabled
                 ? (store.capabilities?.()?.susfs_kstat_redirect && store.capabilities?.()?.susfs_open_redirect_all
-                    ? 'SUSFS integration active (Extended)'
-                    : 'SUSFS integration active (Stock — limited kstat/redirect)')
+                    ? 'Extended kernel — all features available'
+                    : 'Stock kernel — custom commands unavailable')
                 : store.systemInfo.susfsVersion && store.systemInfo.susfsVersion !== 'N/A'
                   ? 'SUSFS available but disabled'
                   : 'Running without SUSFS'}
             </div>
+            <Show when={store.settings.susfs.enabled && store.capabilities?.()}>
+              <div class="status-health__features">
+                {(() => {
+                  const caps = store.capabilities?.();
+                  if (!caps) return null;
+                  const features = [
+                    { key: 'kstat', active: caps.susfs_kstat },
+                    { key: 'path', active: caps.susfs_path },
+                    { key: 'maps', active: caps.susfs_maps },
+                    { key: 'open_redirect', active: caps.susfs_open_redirect },
+                    { key: 'kstat_redirect', active: caps.susfs_kstat_redirect },
+                    { key: 'open_redirect_all', active: caps.susfs_open_redirect_all },
+                  ];
+                  return (
+                    <For each={features}>
+                      {(f) => (
+                        <span class={`status-health__feat-chip ${f.active ? 'status-health__feat-chip--active' : 'status-health__feat-chip--missing'}`}>
+                          {f.active ? '\u2713' : '\u2717'} {f.key}
+                        </span>
+                      )}
+                    </For>
+                  );
+                })()}
+              </div>
+            </Show>
           </div>
+          <Show when={store.degraded()}>
+            <div>
+              <div class="status-health__item-header">
+                <span
+                  class="status-health__level"
+                  style={{ color: store.currentTheme().colorWarning }}
+                >
+                  WARNING
+                </span>
+                <span class="status-health__title color-text-primary">
+                  Degraded
+                </span>
+              </div>
+              <div class="status-health__message color-text-secondary">
+                {store.degradationReason() || 'System running in degraded mode'}
+              </div>
+            </div>
+          </Show>
           <Show when={store.rules().length === 0}>
             <div>
               <div class="status-health__item-header">

@@ -96,15 +96,6 @@ export function ScenarioIndicator() {
       <div class="scenario__desc">
         {config().description}
       </div>
-      <Show when={(scenario() === 'susfs_frontend' || scenario() === 'full') && missing().length > 0}>
-        <div class="scenario__missing">
-          <For each={missing()}>
-            {(cap) => (
-              <span class="scenario__missing-chip">{cap}</span>
-            )}
-          </For>
-        </div>
-      </Show>
     </div>
   );
 }
