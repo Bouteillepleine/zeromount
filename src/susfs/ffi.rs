@@ -201,8 +201,13 @@ pub struct StSusfsHideSusMnts {
 // ---- supercall ----
 
 /// Issue a SUSFS supercall via SYS_reboot with KSU magic numbers.
-/// Returns Ok(err_field_value) on syscall success, Err on syscall failure.
+/// Returns Ok(ret) on syscall success, Err(errno) on syscall failure.
 pub fn supercall(cmd: SusfsCommand, data: *mut u8) -> Result<i32, i32> {
+    supercall_raw(cmd as u32, data)
+}
+
+// Accepts a raw command code for probing arbitrary/nonexistent commands
+pub fn supercall_raw(cmd: u32, data: *mut u8) -> Result<i32, i32> {
     let ret = unsafe {
         libc::syscall(
             libc::SYS_reboot as libc::c_long,

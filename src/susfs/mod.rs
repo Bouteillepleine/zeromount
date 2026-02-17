@@ -34,9 +34,6 @@ pub struct SusfsClient {
 }
 
 impl SusfsClient {
-    /// Probe the kernel for SUSFS availability.
-    /// Returns a client even if SUSFS is absent -- methods will return
-    /// descriptive errors instead of panicking.
     pub fn probe() -> Result<Self> {
         let mut client = Self {
             available: false,
@@ -56,10 +53,24 @@ impl SusfsClient {
             }
         }
 
-        // Probe features via show_enabled_features
+        // Stock features from kernel's enabled_features string
         if let Ok(features_str) = client.query_enabled_features() {
             client.features = parse_features(&features_str);
         }
+
+        // Custom zeromount commands need active kernel probing —
+        // they're our patches, not in SUSFS's enabled_features output
+        let baseline = calibrate_probe_baseline();
+        debug!("probe baseline: {:?}", baseline);
+
+        client.features.kstat_redirect = probe_command(
+            SusfsCommand::AddSusKstatRedirect,
+            &baseline,
+        );
+        client.features.open_redirect_all = probe_command(
+            SusfsCommand::AddOpenRedirectAll,
+            &baseline,
+        );
 
         debug!("SUSFS features: {:?}", client.features);
 
@@ -597,6 +608,7 @@ fn apply_spoof_values(info: &mut StSusfsSusKstat, meta: &fs::Metadata, spoof: &K
     info.spoofed_blocks = spoof.blocks.unwrap_or(meta.blocks());
 }
 
+// Stock features only — custom zeromount commands are detected via active probing
 fn parse_features(features_str: &str) -> SusfsFeatures {
     SusfsFeatures {
         kstat: features_str.contains("CONFIG_KSU_SUSFS_SUS_KSTAT"),
@@ -604,8 +616,156 @@ fn parse_features(features_str: &str) -> SusfsFeatures {
         maps: features_str.contains("CONFIG_KSU_SUSFS_SUS_MAPS")
             || features_str.contains("CONFIG_KSU_SUSFS_SUS_MAP"),
         open_redirect: features_str.contains("CONFIG_KSU_SUSFS_OPEN_REDIRECT"),
-        kstat_redirect: features_str.contains("CONFIG_KSU_SUSFS_SUS_KSTAT_REDIRECT"),
-        open_redirect_all: features_str.contains("CONFIG_KSU_SUSFS_OPEN_REDIRECT_ALL"),
+        kstat_redirect: false,
+        open_redirect_all: false,
+    }
+}
+
+// ---- Calibrated active probing for custom kernel commands ----
+
+const PROBE_ERR_SENTINEL: i32 = 0x5A4D;
+const PROBE_CANARY: u64 = 0xDEAD_CAFE_BABE_F00D;
+const PROBE_NONSENSE_CMD: u32 = 0x5FFFF;
+
+#[derive(Debug, Clone)]
+enum ProbeBaseline {
+    SyscallFails,
+    ErrUntouched,
+    StructZeroed,
+    ErrSet(i32),
+}
+
+fn calibrate_probe_baseline() -> ProbeBaseline {
+    let mut buf = [0u8; 528];
+
+    let err_sentinel_bytes = PROBE_ERR_SENTINEL.to_ne_bytes();
+    let canary_bytes = PROBE_CANARY.to_ne_bytes();
+
+    buf[..8].copy_from_slice(&canary_bytes);
+    buf[524..528].copy_from_slice(&err_sentinel_bytes);
+
+    match supercall_raw(PROBE_NONSENSE_CMD, buf.as_mut_ptr()) {
+        Err(errno) => {
+            debug!(
+                "probe calibration: nonsense cmd 0x{:X} → syscall failed (errno {})",
+                PROBE_NONSENSE_CMD, errno
+            );
+            ProbeBaseline::SyscallFails
+        }
+        Ok(ret) => {
+            let canary_after = u64::from_ne_bytes(buf[..8].try_into().unwrap());
+            let err_after = i32::from_ne_bytes(buf[524..528].try_into().unwrap());
+
+            debug!(
+                "probe calibration: nonsense cmd 0x{:X} → ret={}, err={} (sentinel={}), canary={:#X} (sentinel={:#X})",
+                PROBE_NONSENSE_CMD, ret, err_after, PROBE_ERR_SENTINEL,
+                canary_after, PROBE_CANARY
+            );
+
+            if err_after == PROBE_ERR_SENTINEL && canary_after == PROBE_CANARY {
+                ProbeBaseline::ErrUntouched
+            } else if err_after == 0 && canary_after == 0 {
+                ProbeBaseline::StructZeroed
+            } else {
+                ProbeBaseline::ErrSet(err_after)
+            }
+        }
+    }
+}
+
+fn probe_command(cmd: SusfsCommand, baseline: &ProbeBaseline) -> bool {
+    match cmd {
+        SusfsCommand::AddSusKstatRedirect => probe_kstat_redirect(baseline),
+        SusfsCommand::AddOpenRedirectAll => probe_open_redirect_all(baseline),
+        _ => false,
+    }
+}
+
+fn probe_kstat_redirect(baseline: &ProbeBaseline) -> bool {
+    let mut info = StSusfsSusKstatRedirect {
+        virtual_pathname: [0u8; SUSFS_MAX_LEN_PATHNAME],
+        real_pathname: [0u8; SUSFS_MAX_LEN_PATHNAME],
+        spoofed_ino: PROBE_CANARY,
+        spoofed_dev: 0,
+        spoofed_nlink: 0,
+        _pad0: [0; 4],
+        spoofed_size: 0,
+        spoofed_atime_tv_sec: 0,
+        spoofed_mtime_tv_sec: 0,
+        spoofed_ctime_tv_sec: 0,
+        spoofed_atime_tv_nsec: 0,
+        spoofed_mtime_tv_nsec: 0,
+        spoofed_ctime_tv_nsec: 0,
+        spoofed_blksize: 0,
+        spoofed_blocks: 0,
+        err: PROBE_ERR_SENTINEL,
+    };
+    copy_path_to_buf(&mut info.virtual_pathname, "/__zm_probe__");
+
+    match supercall(SusfsCommand::AddSusKstatRedirect, &mut info as *mut _ as *mut u8) {
+        Err(errno) => {
+            debug!("probe kstat_redirect (0x55573): syscall failed (errno {errno})");
+            false
+        }
+        Ok(ret) => {
+            let result = interpret_probe_result(info.err, info.spoofed_ino, baseline);
+            debug!(
+                "probe kstat_redirect (0x55573): ret={}, err={}, canary={:#X}, baseline={:?} → {}",
+                ret, info.err, info.spoofed_ino, baseline,
+                if result { "SUPPORTED" } else { "NOT SUPPORTED" }
+            );
+            result
+        }
+    }
+}
+
+fn probe_open_redirect_all(baseline: &ProbeBaseline) -> bool {
+    let mut info = StSusfsOpenRedirect {
+        target_ino: PROBE_CANARY,
+        target_pathname: [0u8; SUSFS_MAX_LEN_PATHNAME],
+        redirected_pathname: [0u8; SUSFS_MAX_LEN_PATHNAME],
+        err: PROBE_ERR_SENTINEL,
+    };
+    copy_path_to_buf(&mut info.target_pathname, "/__zm_probe__");
+
+    match supercall(SusfsCommand::AddOpenRedirectAll, &mut info as *mut _ as *mut u8) {
+        Err(errno) => {
+            debug!("probe open_redirect_all (0x555c1): syscall failed (errno {errno})");
+            false
+        }
+        Ok(ret) => {
+            let result = interpret_probe_result(info.err, info.target_ino, baseline);
+            debug!(
+                "probe open_redirect_all (0x555c1): ret={}, err={}, canary={:#X}, baseline={:?} → {}",
+                ret, info.err, info.target_ino, baseline,
+                if result { "SUPPORTED" } else { "NOT SUPPORTED" }
+            );
+            result
+        }
+    }
+}
+
+fn interpret_probe_result(err: i32, canary_field: u64, baseline: &ProbeBaseline) -> bool {
+    match baseline {
+        ProbeBaseline::SyscallFails => {
+            // Baseline fails at syscall level but this command succeeded — it exists
+            true
+        }
+        ProbeBaseline::ErrUntouched => {
+            // Baseline leaves err at sentinel; if err changed, kernel handled it
+            err != PROBE_ERR_SENTINEL
+        }
+        ProbeBaseline::StructZeroed => {
+            // Baseline zeros everything; if canary survived, kernel processed (not zeroed)
+            if err == 0 && canary_field == 0 {
+                return false; // same as baseline: zeroed
+            }
+            err != PROBE_ERR_SENTINEL
+        }
+        ProbeBaseline::ErrSet(baseline_err) => {
+            // Baseline sets err to a default; different err means kernel handled it
+            err != *baseline_err
+        }
     }
 }
 
@@ -653,7 +813,9 @@ mod tests {
     }
 
     #[test]
-    fn parse_features_extended_kernel() {
+    fn parse_features_ignores_custom_commands() {
+        // Custom zeromount features are detected via active probing, not string matching.
+        // Even if the strings appeared, parse_features must return false for them.
         let features = "CONFIG_KSU_SUSFS_SUS_PATH=y\n\
                         CONFIG_KSU_SUSFS_SUS_KSTAT=y\n\
                         CONFIG_KSU_SUSFS_SUS_MAPS=y\n\
@@ -665,8 +827,8 @@ mod tests {
         assert!(f.kstat);
         assert!(f.maps);
         assert!(f.open_redirect);
-        assert!(f.kstat_redirect);
-        assert!(f.open_redirect_all);
+        assert!(!f.kstat_redirect, "custom features come from active probing only");
+        assert!(!f.open_redirect_all, "custom features come from active probing only");
     }
 
     #[test]
@@ -811,16 +973,17 @@ mod tests {
     }
 
     #[test]
-    fn parse_features_custom_without_base_prefix_collision() {
+    fn parse_features_base_still_matches_from_custom_substrings() {
         // CONFIG_KSU_SUSFS_SUS_KSTAT_REDIRECT contains CONFIG_KSU_SUSFS_SUS_KSTAT
-        // as prefix — both should match when redirect is present
+        // as prefix — base features still match via substring even though custom
+        // features are no longer derived from strings
         let features = "CONFIG_KSU_SUSFS_SUS_KSTAT_REDIRECT=y\n\
                         CONFIG_KSU_SUSFS_OPEN_REDIRECT_ALL=y\n";
         let f = parse_features(features);
-        assert!(f.kstat, "base kstat should match from KSTAT_REDIRECT substring");
-        assert!(f.kstat_redirect);
-        assert!(f.open_redirect, "base redirect should match from REDIRECT_ALL substring");
-        assert!(f.open_redirect_all);
+        assert!(f.kstat, "base kstat matches from KSTAT_REDIRECT substring");
+        assert!(!f.kstat_redirect, "custom features need active probing");
+        assert!(f.open_redirect, "base redirect matches from REDIRECT_ALL substring");
+        assert!(!f.open_redirect_all, "custom features need active probing");
     }
 
     #[test]
@@ -870,5 +1033,76 @@ mod tests {
         assert!(with_all.open_redirect_all);
         assert!(!without_all.open_redirect_all);
         assert!(without_all.open_redirect);
+    }
+
+    // -- Probe interpretation tests --
+
+    #[test]
+    fn probe_syscall_fails_baseline_rejects_same() {
+        // Baseline: syscall fails. Probe also fails = not supported.
+        // (interpret_probe_result only called on Ok, so SyscallFails + Ok = supported)
+        let result = interpret_probe_result(0, PROBE_CANARY, &ProbeBaseline::SyscallFails);
+        assert!(result, "syscall succeeded when baseline fails = command exists");
+    }
+
+    #[test]
+    fn probe_err_untouched_baseline_sentinel_stays() {
+        let result = interpret_probe_result(
+            PROBE_ERR_SENTINEL, PROBE_CANARY, &ProbeBaseline::ErrUntouched,
+        );
+        assert!(!result, "err unchanged from sentinel = not supported");
+    }
+
+    #[test]
+    fn probe_err_untouched_baseline_err_changed() {
+        // Kernel set err to ENOENT (2) = it handled the command
+        let result = interpret_probe_result(2, PROBE_CANARY, &ProbeBaseline::ErrUntouched);
+        assert!(result, "err changed from sentinel = command exists");
+    }
+
+    #[test]
+    fn probe_err_untouched_baseline_err_zero() {
+        let result = interpret_probe_result(0, PROBE_CANARY, &ProbeBaseline::ErrUntouched);
+        assert!(result, "err=0 (success) when baseline leaves sentinel = supported");
+    }
+
+    #[test]
+    fn probe_struct_zeroed_baseline_both_zero() {
+        let result = interpret_probe_result(0, 0, &ProbeBaseline::StructZeroed);
+        assert!(!result, "both zeroed = same as baseline = not supported");
+    }
+
+    #[test]
+    fn probe_struct_zeroed_baseline_canary_survives() {
+        // err=0, canary intact. Not zeroed (canary != 0), err changed from sentinel.
+        // This means the kernel processed the command successfully.
+        let result = interpret_probe_result(0, PROBE_CANARY, &ProbeBaseline::StructZeroed);
+        assert!(result, "not zeroed and err changed from sentinel = supported");
+    }
+
+    #[test]
+    fn probe_struct_zeroed_baseline_err_nonzero_canary_zero() {
+        // Kernel set err=2 (ENOENT) but zeroed canary field — still handled
+        let result = interpret_probe_result(2, 0, &ProbeBaseline::StructZeroed);
+        assert!(result, "err changed from sentinel = command exists");
+    }
+
+    #[test]
+    fn probe_err_set_baseline_same_default() {
+        let result = interpret_probe_result(42, PROBE_CANARY, &ProbeBaseline::ErrSet(42));
+        assert!(!result, "same err as baseline default = not supported");
+    }
+
+    #[test]
+    fn probe_err_set_baseline_different() {
+        let result = interpret_probe_result(2, PROBE_CANARY, &ProbeBaseline::ErrSet(42));
+        assert!(result, "different err from baseline = command exists");
+    }
+
+    #[test]
+    fn probe_sentinel_constant_not_real_errno() {
+        // PROBE_ERR_SENTINEL should never collide with real kernel errors
+        assert!(PROBE_ERR_SENTINEL > 126, "sentinel must be above ERR_CMD_NOT_SUPPORTED");
+        assert_ne!(PROBE_ERR_SENTINEL, 0);
     }
 }
