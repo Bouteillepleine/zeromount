@@ -5,12 +5,17 @@
 MODDIR="${0%/*}"
 LOG="zeromount"
 
+# Single-instance lock -- KSU metamodule mode can double-fire
+LOCKFILE="/dev/zeromount_metamount_lock"
+[ -f "$LOCKFILE" ] && { ksud kernel notify-module-mounted 2>/dev/null; exit 0; }
+touch "$LOCKFILE"
+
 echo "$LOG: metamount.sh entered (post-fs-data)" > /dev/kmsg 2>/dev/null
 
 # Shell-level bootloop guard — metamount.sh is blocking, so a broken
 # pipeline would hang boot indefinitely without this check.
 COUNT=$(cat /data/adb/zeromount/.bootcount 2>/dev/null || echo 0)
-if [ "$COUNT" -ge 3 ]; then
+if [ "$COUNT" -gt 0 ]; then
     echo "$LOG: bootloop guard (count=$COUNT), skipping pipeline" > /dev/kmsg 2>/dev/null
     ksud kernel notify-module-mounted 2>/dev/null
     exit 0
