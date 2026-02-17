@@ -9,7 +9,7 @@ use super::types::{
     CapabilityFlags, DetectionResult, ModuleStatus, MountPlan, MountResult, MountStrategy,
     RootManager, RuntimeState, ScannedModule, Scenario,
 };
-use crate::mount::umount;
+
 
 const MODULES_DIR: &str = "/data/adb/modules";
 const STATUS_JSON_PATH: &str = "/data/adb/zeromount/.status.json";
@@ -231,43 +231,8 @@ impl MountController<Planned> {
         let failed = results.iter().filter(|r| !r.success).count();
         info!(succeeded, failed, "execution complete");
 
-        let mut umount_registered = 0u32;
-        let mut umount_failed = 0u32;
-
-        // try_umount is KSU core (ioctl 0x4000_4B12), works on ALL KSU kernels.
-        // Register our mount paths so deny-list apps see stock mounts only.
-        let mut non_vfs_paths: Vec<String> = results.iter()
-            .filter(|r| r.success && !matches!(r.strategy_used, MountStrategy::Vfs | MountStrategy::Font))
-            .flat_map(|r| r.mount_paths.iter().cloned())
-            .collect();
-        non_vfs_paths.sort_unstable();
-        non_vfs_paths.dedup();
-        debug!(
-            count = non_vfs_paths.len(),
-            paths = ?non_vfs_paths,
-            "try_umount paths collected (deduped)"
-        );
-        if !non_vfs_paths.is_empty() {
-            let stats = crate::mount::try_umount::register_unmountable(
-                &non_vfs_paths,
-                self.state.root_mgr.name(),
-            );
-            umount_registered += stats.registered;
-            umount_failed += stats.failed;
-        }
-
-        if umount_registered > 0 || umount_failed > 0 {
-            info!(
-                registered = umount_registered,
-                failed = umount_failed,
-                "try_umount total"
-            );
-        }
-
-        // NOTE: gap_filler (peer group gap filling + shadow bind mounts) and
-        // stock OEM overlay try_umount registration archived — both created
+        // NOTE: gap_filler and try_umount were removed — both created
         // unhidden mounts visible in app namespaces that NativeTest detects.
-        // See gap_filler.rs and stock_overlays.rs for the preserved code.
 
         // Per-module SUSFS kstat spoofing for non-VFS strategies (font kstat, etc.)
         let has_non_vfs = results.iter().any(|r| {
@@ -623,16 +588,19 @@ fn cleanup_previous_mounts() {
 
     for module in &prev_state.modules {
         match module.strategy {
-            MountStrategy::Overlay => {
+            MountStrategy::Overlay | MountStrategy::MagicMount => {
                 for path in &module.mount_paths {
-                    if let Err(e) = umount::umount_overlay(Path::new(path)) {
-                        debug!(path = %path, error = %e, "previous overlay umount failed (may already be gone)");
+                    let c_path = match std::ffi::CString::new(path.as_bytes()) {
+                        Ok(p) => p,
+                        Err(_) => continue,
+                    };
+                    let ret = unsafe { libc::umount2(c_path.as_ptr(), libc::MNT_DETACH) };
+                    if ret != 0 {
+                        let errno = std::io::Error::last_os_error();
+                        if errno.raw_os_error() != Some(libc::EINVAL) {
+                            debug!(path = %path, error = %errno, "previous umount failed (may already be gone)");
+                        }
                     }
-                }
-            }
-            MountStrategy::MagicMount => {
-                if let Err(e) = umount::umount_magic(&module.mount_paths) {
-                    debug!(module = %module.id, error = %e, "previous magic umount failed");
                 }
             }
             MountStrategy::Vfs | MountStrategy::Font => {

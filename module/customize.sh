@@ -156,10 +156,6 @@ else
     zm_print "  ⚠️ SUSFS not detected in kernel — skipping config"
 fi
 
-if command -v ksud >/dev/null 2>&1; then
-    ksud module config set manage.kernel_umount false 2>/dev/null || true
-fi
-
 zm_print "🚀 Finalizing" 0.3 "h"
 
 echo 0 > "$ZM_DATA/.bootcount"
