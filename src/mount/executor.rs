@@ -232,9 +232,10 @@ fn ensure_parent_dirs_with_context(
             let real_path = partition_root.join(
                 current.strip_prefix(lower_dir).unwrap_or(Path::new("")),
             );
-            if real_path.exists() {
-                crate::utils::selinux::copy_selinux_context(&real_path, &current);
-            }
+            // copy_selinux_context handles missing real_path: falls back to
+            // u:object_r:system_file:s0, preventing module-created dirs from
+            // inheriting tmpfs/ext4 default labels that cause AVC denials.
+            crate::utils::selinux::copy_selinux_context(&real_path, &current);
         }
     }
 
