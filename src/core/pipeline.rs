@@ -576,7 +576,12 @@ impl MountController<Mounted> {
             hidden_path_count: 0,
             susfs_version: det.capabilities.susfs_version.clone(),
             active_strategy,
-            mount_source: self.state.overlay_source.clone(),
+            mount_source: match active_strategy {
+                Some(MountStrategy::Vfs) => Some("VFS".into()),
+                Some(MountStrategy::MagicMount) => Some("KSU".into()),
+                Some(MountStrategy::Overlay) => self.state.overlay_source.clone(),
+                _ => self.state.overlay_source.clone(),
+            },
             modules,
             font_modules: font_infos.iter().map(|f| f.id.clone()).collect(),
             timestamp,

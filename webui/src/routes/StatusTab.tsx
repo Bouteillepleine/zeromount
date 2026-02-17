@@ -488,14 +488,13 @@ export function StatusTab() {
             </div>
             <div class="status-mount__card-value color-text-accent">
               {(() => {
-                const src = store.mountSource();
-                if (src) return src;
+                const runtime = store.mountSource();
+                if (runtime) return runtime;
+                const strategy = store.effectiveStrategy();
+                if (strategy === 'Vfs') return 'VFS';
+                if (strategy === 'MagicMount') return 'KSU';
                 const cfg = store.settings.mount.overlay_source;
-                if (cfg && cfg !== 'auto') return cfg;
-                const rm = store.rootManager();
-                if (rm === 'KernelSU' || rm === 'APatch') return 'KSU';
-                if (rm === 'Magisk') return 'magisk';
-                return 'overlay';
+                return (cfg && cfg !== 'auto') ? cfg : 'Overlay';
               })()}
             </div>
           </div>
