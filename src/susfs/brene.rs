@@ -1,6 +1,6 @@
 use std::fs;
-use std::os::unix::fs::MetadataExt;
-use std::path::Path;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result};
@@ -50,6 +50,7 @@ const ZYGISK_MAP_PATTERNS: &[&str] = &[
 
 const SYSTEM_FONTS_DIR: &str = "/system/fonts";
 const MODULES_DIR: &str = "/data/adb/modules";
+const FONT_STAGING_DIR: &str = "/data/local/tmp/.zm/fonts";
 
 const DEX2OAT_UMOUNT_PATHS: &[&str] = &[
     "/system/apex/com.android.art/bin/dex2oat",
@@ -364,6 +365,18 @@ fn process_font_modules(client: &SusfsClient, overlay_source: &str) -> Vec<FontM
     results
 }
 
+fn stage_font_file(source: &Path, filename: &str) -> Option<PathBuf> {
+    let staging_dir = Path::new(FONT_STAGING_DIR);
+    if !staging_dir.exists() {
+        fs::create_dir_all(staging_dir).ok()?;
+        fs::set_permissions(staging_dir, fs::Permissions::from_mode(0o755)).ok()?;
+    }
+    let dest = staging_dir.join(filename);
+    fs::copy(source, &dest).ok()?;
+    fs::set_permissions(&dest, fs::Permissions::from_mode(0o644)).ok()?;
+    Some(dest)
+}
+
 fn bind_mount_font_files(font_dir: &Path, system_font_dir: &str) -> u32 {
     let entries = match fs::read_dir(font_dir) {
         Ok(e) => e,
@@ -383,7 +396,17 @@ fn bind_mount_font_files(font_dir: &Path, system_font_dir: &str) -> u32 {
         let target = format!("{}/{}", system_font_dir, filename);
 
         if !Path::new(&target).exists() {
-            debug!("font bind skip {filename}: no stock counterpart");
+            if let Some(staged) = stage_font_file(&source, filename) {
+                crate::utils::selinux::copy_selinux_context(
+                    Path::new(SYSTEM_FONTS_DIR), &staged
+                );
+                if let Ok(driver) = crate::vfs::VfsDriver::open() {
+                    match driver.add_rule(&staged, Path::new(&target), false) {
+                        Ok(()) => debug!("font VFS rule: {filename} (staged)"),
+                        Err(e) => debug!("font VFS rule failed for {filename}: {e}"),
+                    }
+                }
+            }
             continue;
         }
 
@@ -432,6 +455,7 @@ fn hide_font_modules_overlay(client: &SusfsClient) -> Vec<FontModuleInfo> {
 
     // bind mounts don't affect the parent dir — stat it for stock erofs dev
     let stock_dev = fs::metadata(SYSTEM_FONTS_DIR).ok().map(|m| m.dev());
+    let vfs_driver = crate::vfs::VfsDriver::open().ok();
 
     let mut results = Vec::new();
 
@@ -493,6 +517,18 @@ fn hide_font_modules_overlay(client: &SusfsClient) -> Vec<FontModuleInfo> {
             if client.features().path {
                 if let Err(e) = client.add_sus_path(&replacement) {
                     debug!("overlay font path hide failed for {filename}: {e}");
+                }
+            }
+
+            if let Some(ref driver) = vfs_driver {
+                if let Some(staged) = stage_font_file(&path, filename) {
+                    crate::utils::selinux::copy_selinux_context(
+                        Path::new(&target), &staged
+                    );
+                    match driver.add_rule(&staged, Path::new(&target), false) {
+                        Ok(()) => debug!("overlay font VFS rule: {filename} (staged)"),
+                        Err(e) => debug!("overlay font VFS rule failed for {filename}: {e}"),
+                    }
                 }
             }
 
