@@ -1,4 +1,5 @@
 use std::fs;
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::process::Command;
 
@@ -429,6 +430,9 @@ fn hide_font_modules_overlay(client: &SusfsClient) -> Vec<FontModuleInfo> {
         Err(_) => return Vec::new(),
     };
 
+    // bind mounts don't affect the parent dir — stat it for stock erofs dev
+    let stock_dev = fs::metadata(SYSTEM_FONTS_DIR).ok().map(|m| m.dev());
+
     let mut results = Vec::new();
 
     for entry in entries.filter_map(|e| e.ok()) {
@@ -470,7 +474,14 @@ fn hide_font_modules_overlay(client: &SusfsClient) -> Vec<FontModuleInfo> {
 
             if client.features().kstat {
                 match kstat::build_kstat_values_from_paths(&target, &replacement) {
-                    Ok(spoof) => {
+                    Ok(mut spoof) => {
+                        if let Some(dev) = stock_dev {
+                            spoof.dev = Some(dev);
+                            let hash: u64 = target.bytes().fold(0xcbf29ce484222325u64, |h, b| {
+                                (h ^ b as u64).wrapping_mul(0x100000001b3)
+                            });
+                            spoof.ino = Some(hash % 2_147_483_647);
+                        }
                         if let Err(e) = client.add_sus_kstat_redirect(&target, &replacement, &spoof) {
                             debug!("overlay font kstat failed for {filename}: {e}");
                         }
