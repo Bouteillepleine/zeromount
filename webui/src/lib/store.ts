@@ -757,6 +757,9 @@ function createAppStore() {
     setSettings('mount', key, value);
     try {
       await api.configSet(`mount.${key}`, String(value));
+      if (key === 'hide_stock_overlays') {
+        api.setHideOverlays(value).catch(e => console.warn('[ZM-Store] sysfs hide_overlays write failed:', e));
+      }
       pushActivity('setting_changed', `${key} → ${value ? 'ON' : 'OFF'}`);
       console.log('[ZM-Store] setMountToggle() saved:', key, value);
     } catch (e) {

@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -390,6 +391,22 @@ impl MountController<Mounted> {
         // 1. SUSFS protections (BRENE)
         let (hidden_paths, font_infos) = self.apply_susfs_protections();
 
+        // 1b. Push hide_stock_overlays toggle to kernel sysfs before apps launch
+        let hide_val = if self.state.config.mount.hide_stock_overlays { "1" } else { "0" };
+        match fs::write("/sys/kernel/zeromount/hide_overlays", hide_val) {
+            Ok(()) => info!(enabled = self.state.config.mount.hide_stock_overlays, "overlay hide sysfs toggle applied"),
+            Err(e) => warn!("overlay hide sysfs write failed (non-fatal): {e}"),
+        }
+
+        // 1c. Collect stock OEM overlays for diagnostics/status reporting
+        let stock_overlay_count = if self.state.config.mount.hide_stock_overlays {
+            let overlays = crate::mount::stock_overlays::collect_stock_overlays();
+            info!(count = overlays.len(), "stock OEM overlays detected");
+            overlays.len() as u32
+        } else {
+            0
+        };
+
         // 2. Update module description with status summary
         let summary = self.build_description_summary(&font_infos);
         if let Err(e) = self.state.root_mgr.update_description(&summary) {
@@ -399,6 +416,7 @@ impl MountController<Mounted> {
         // 3. Build RuntimeState and persist atomically (ME07: write tmp then rename)
         let mut runtime_state = self.build_runtime_state(&font_infos);
         runtime_state.hidden_path_count = hidden_paths;
+        runtime_state.stock_overlay_count = stock_overlay_count;
         write_status_json_atomic(&runtime_state);
 
         // 4. KSU09: notify-module-mounted LAST -- after all rules, SUSFS, description
@@ -599,6 +617,7 @@ impl MountController<Mounted> {
             degradation_reason,
             root_manager: Some(self.state.root_mgr.name().to_string()),
             resolved_storage_mode: crate::mount::storage::get_resolved_storage_mode(),
+            stock_overlay_count: 0,
         }
     }
 }
