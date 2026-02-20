@@ -6,13 +6,14 @@ interface CardProps {
   variant?: 'glass' | 'gradient-border';
   padding?: 'none' | 'small' | 'medium' | 'large';
   hoverable?: boolean;
+  class?: string;
   style?: string;
   onClick?: (e: MouseEvent) => void;
   children?: JSXElement;
 }
 
 export function Card(props: CardProps) {
-  const [local] = splitProps(props, ['variant', 'padding', 'hoverable', 'children', 'style', 'onClick']);
+  const [local] = splitProps(props, ['variant', 'padding', 'hoverable', 'class', 'children', 'style', 'onClick']);
 
   const variant = () => local.variant || 'glass';
   const padding = () => local.padding || 'medium';
@@ -22,6 +23,7 @@ export function Card(props: CardProps) {
     classes.push(`card--${variant()}`);
     classes.push(`card--padding-${padding()}`);
     if (local.hoverable) classes.push('card--hoverable');
+    if (local.class) classes.push(local.class);
     return classes.join(' ');
   };
 

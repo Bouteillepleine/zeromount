@@ -18,7 +18,7 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: headerPulse 4s ease-in-out infinite;
+  animation: headerPulse 4s ease-in-out 1 forwards;
   margin: 0;
   line-height: 1.2;
 }
@@ -34,7 +34,7 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: subtitleGlow 3s ease-in-out infinite alternate, subtitleShimmer 5s linear infinite;
+  animation: subtitleShimmer 2s ease-in-out 1 forwards;
   filter: drop-shadow(0 0 6px rgba(245, 217, 142, 0.4));
 }
 

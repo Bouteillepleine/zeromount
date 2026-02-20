@@ -241,7 +241,7 @@ export function StatusTab() {
           </Card>
         }
       >
-        <Card variant="gradient-border" padding="large" style={isModuleActive() ? 'animation: glowPulse 3s ease-in-out infinite;' : ''}>
+        <Card variant="gradient-border" padding="large" class={isModuleActive() ? 'status-hero-card status-hero-card--active' : 'status-hero-card'}>
           <div class="status-hero">
             <div
               class="status-hero__indicator"

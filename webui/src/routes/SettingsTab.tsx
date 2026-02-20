@@ -779,7 +779,7 @@ export function SettingsTab() {
           </div>
 
           <div class="settings__footer">
-            Made with <span class="glow-text">passion</span> for the Android <span class="glow-text">community</span>
+            Made with <span class="gradient-text">passion</span> for the Android <span class="gradient-text">community</span>
           </div>
         </div>
       </Card>
