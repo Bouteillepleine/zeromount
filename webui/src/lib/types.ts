@@ -129,6 +129,10 @@ export interface SusfsSettings {
   open_redirect: boolean;
 }
 
+export interface PerfSettings {
+  enabled: boolean;
+}
+
 export type UnameMode = 'disabled' | 'static' | 'dynamic';
 
 export interface UnameSettings {
@@ -158,6 +162,7 @@ export interface Settings {
   susfs: SusfsSettings;
   uname: UnameSettings;
   mount: MountSettings;
+  perf: PerfSettings;
 }
 
 export type Scenario = 'full' | 'susfs_frontend' | 'kernel_only' | 'susfs_only' | 'none';

@@ -24,6 +24,8 @@ pub struct ZeroMountConfig {
     #[serde(default)]
     pub uname: UnameConfig,
     #[serde(default)]
+    pub perf: PerfConfig,
+    #[serde(default)]
     pub per_module: HashMap<String, ModuleOverrides>,
 }
 
@@ -252,6 +254,20 @@ impl Default for UnameConfig {
     }
 }
 
+// -- Performance --
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerfConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl Default for PerfConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
 // -- Per-module overrides --
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -282,6 +298,7 @@ impl Default for ZeroMountConfig {
             susfs: SusfsConfig::default(),
             brene: BreneConfig::default(),
             uname: UnameConfig::default(),
+            perf: PerfConfig::default(),
             per_module: HashMap::new(),
         }
     }
@@ -456,6 +473,9 @@ impl ZeroMountConfig {
             "uname.release" => Some(self.uname.release.clone()),
             "uname.version" => Some(self.uname.version.clone()),
 
+            // perf.*
+            "perf.enabled" => Some(self.perf.enabled.to_string()),
+
             // per_module.<id>.<field>
             k if k.starts_with("per_module.") => self.get_module_key(k),
 
@@ -511,6 +531,9 @@ impl ZeroMountConfig {
             "uname.mode" => self.uname.mode = parse_uname_mode(value)?,
             "uname.release" => self.uname.release = value.to_string(),
             "uname.version" => self.uname.version = value.to_string(),
+
+            // perf.*
+            "perf.enabled" => self.perf.enabled = value.parse()?,
 
             // per_module.<id>.<field>
             k if k.starts_with("per_module.") => self.set_module_key(k, value)?,
@@ -675,6 +698,7 @@ mod tests {
         assert!(!config.brene.spoof_cmdline);
         assert!(!config.brene.hide_ksu_loops);
         assert_eq!(config.uname.mode, UnameMode::Disabled);
+        assert!(config.perf.enabled);
         assert!(config.per_module.is_empty());
     }
 

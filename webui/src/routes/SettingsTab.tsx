@@ -692,6 +692,26 @@ export function SettingsTab() {
       <Card>
         <h3 class="settings__section-title">
           <svg class="settings__section-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.38 8.57l-1.23 1.85a8 8 0 0 1-.22 7.58H5.07A8 8 0 0 1 15.58 6.85l1.85-1.23A10 10 0 0 0 3.35 19a2 2 0 0 0 1.72 1h13.85a2 2 0 0 0 1.74-1 10 10 0 0 0-.27-10.44z"/>
+            <path d="M10.59 15.41a2 2 0 0 0 2.83 0l5.66-8.49-8.49 5.66a2 2 0 0 0 0 2.83z"/>
+          </svg>
+          Performance
+        </h3>
+        <div class="settings__item">
+          <div class="settings__item-content">
+            <div class="settings__item-label">Performance Tweak</div>
+            <div class="settings__item-desc">Optimize scheduler, memory, I/O and CPU frequency at boot</div>
+          </div>
+          <Toggle
+            checked={store.settings.perf.enabled}
+            onChange={(v) => store.setPerfToggle('enabled', v)}
+          />
+        </div>
+      </Card>
+
+      <Card>
+        <h3 class="settings__section-title">
+          <svg class="settings__section-icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
           </svg>
           About

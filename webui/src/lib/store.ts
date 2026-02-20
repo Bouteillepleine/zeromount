@@ -1,6 +1,6 @@
 import { createSignal, createRoot, createMemo, createEffect } from 'solid-js';
 import { createStore } from 'solid-js/store';
-import type { Tab, Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo, Settings, InstalledApp, KsuModule, CapabilityFlags, ModuleStatus, BreneSettings, SusfsSettings, UnameSettings, UnameMode, MountSettings, StorageMode, MountStrategy } from './types';
+import type { Tab, Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo, Settings, InstalledApp, KsuModule, CapabilityFlags, ModuleStatus, BreneSettings, SusfsSettings, PerfSettings, UnameSettings, UnameMode, MountSettings, StorageMode, MountStrategy } from './types';
 import { api, shouldUseMock } from './api';
 import { listPackages, getPackagesInfo, getAppLabelViaAapt } from './ksuApi';
 import { darkTheme, lightTheme, amoledTheme, applyTheme, getAccentStyles, accentPresets } from './theme';
@@ -134,6 +134,10 @@ function createAppStore() {
     overlay_source: 'auto',
   };
 
+  const defaultPerf: PerfSettings = {
+    enabled: true,
+  };
+
   const [settings, setSettings] = createStore<Settings>({
     theme: (savedTheme || 'amoled') as 'dark' | 'light' | 'auto' | 'amoled',
     accentColor: initialAccent,
@@ -144,6 +148,7 @@ function createAppStore() {
     susfs: { ...defaultSusfs },
     uname: { ...defaultUname },
     mount: { ...defaultMount },
+    perf: { ...defaultPerf },
   });
 
   const [systemPrefersDark, setSystemPrefersDark] = createSignal(
@@ -289,6 +294,7 @@ function createAppStore() {
       const configLoads = Promise.allSettled([
         loadBreneSettings(dump),
         loadSusfsSettings(dump),
+        loadPerfSettings(dump),
         loadMountSettings(dump),
         loadVerboseState(dump),
       ]);
@@ -619,6 +625,18 @@ function createAppStore() {
     }
   };
 
+  const setPerfToggle = async (key: keyof PerfSettings, value: boolean) => {
+    setSettings('perf', key, value);
+    try {
+      await api.configSet(`perf.${key}`, String(value));
+      pushActivity('setting_changed', `perf.${key} → ${value ? 'ON' : 'OFF'}`);
+    } catch (e) {
+      console.error('[ZM-Store] setPerfToggle() error:', e);
+      showToast(`Failed to save ${key}`, 'error');
+      setSettings('perf', key, !value);
+    }
+  };
+
   const setUnameMode = async (mode: UnameMode) => {
     const prev = settings.uname.mode;
     setSettings('uname', 'mode', mode);
@@ -669,6 +687,24 @@ function createAppStore() {
       }
     });
     setSettings('susfs', prev => ({ ...prev, ...susfs }));
+  };
+
+  const loadPerfSettings = async (dump?: Record<string, any> | null) => {
+    if (dump?.perf) {
+      const p = dump.perf;
+      const perf: Partial<PerfSettings> = {};
+      if ('enabled' in p) {
+        const v = p.enabled;
+        perf.enabled = typeof v === 'boolean' ? v : String(v) === 'true';
+      }
+      setSettings('perf', prev => ({ ...prev, ...perf }));
+      return;
+    }
+
+    const result = await api.configGet('perf.enabled');
+    if (result !== null) {
+      setSettings('perf', 'enabled', result === 'true');
+    }
   };
 
   const loadMountSettings = async (dump?: Record<string, any> | null) => {
@@ -1103,6 +1139,7 @@ function createAppStore() {
     loadBreneSettings,
     setBreneToggle,
     setSusfsToggle,
+    setPerfToggle,
     setUnameMode,
     setUnameField,
     loadMountSettings,
