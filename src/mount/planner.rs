@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::core::types::{
     CapabilityFlags, ModuleFileType, MountPlan, MountStrategy, PartitionMount,
@@ -88,6 +88,10 @@ fn select_strategy(
         Scenario::Full | Scenario::SusfsFrontend | Scenario::KernelOnly => {
             match user_override {
                 Some(s @ MountStrategy::Overlay) | Some(s @ MountStrategy::MagicMount) => s,
+                Some(other) => {
+                    warn!(strategy = ?other, "mount strategy fell through to Vfs — check planner conditions");
+                    MountStrategy::Vfs
+                }
                 _ => MountStrategy::Vfs,
             }
         }
