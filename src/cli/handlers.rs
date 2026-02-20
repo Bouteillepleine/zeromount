@@ -188,12 +188,12 @@ pub fn handle_config(action: ConfigAction) -> Result<()> {
         }
         ConfigAction::Set { key, value } => {
             config.set(&key, &value)?;
-            config.save(None)?;
+            config.save()?;
             println!("ok");
         }
         ConfigAction::Restore => {
             let restored = crate::core::config::ZeroMountConfig::restore_backup()?;
-            restored.save(None)?;
+            restored.save()?;
             println!("config restored from backup");
         }
         ConfigAction::Dump { json } => {
@@ -301,7 +301,7 @@ pub fn handle_susfs(feature: &str, state: &str) -> Result<()> {
     };
 
     config.set(key, state)?;
-    config.save(None)?;
+    config.save()?;
     println!("ok");
     Ok(())
 }
@@ -442,6 +442,7 @@ fn wait_for_sdcard(timeout: Duration) -> bool {
         return poll_for_sdcard(timeout);
     }
 
+    // SAFETY: inotify_init1 flags are valid constants; returns fd or -1 (checked below).
     let fd = unsafe { libc::inotify_init1(libc::O_NONBLOCK | libc::O_CLOEXEC) };
     if fd < 0 {
         warn!("inotify_init1 failed, falling back to polling");
@@ -451,15 +452,18 @@ fn wait_for_sdcard(timeout: Duration) -> bool {
     let c_path = match std::ffi::CString::new(SDCARD_WATCH_DIR) {
         Ok(p) => p,
         Err(_) => {
+            // SAFETY: fd is a valid open file descriptor from inotify_init1 above.
             unsafe { libc::close(fd); }
             return poll_for_sdcard(timeout);
         }
     };
 
+    // SAFETY: fd is valid from inotify_init1; CString is non-null NUL-terminated.
     let wd = unsafe {
         libc::inotify_add_watch(fd, c_path.as_ptr(), IN_CREATE | IN_MOVED_TO)
     };
     if wd < 0 {
+        // SAFETY: fd is a valid open file descriptor from inotify_init1 above.
         unsafe { libc::close(fd); }
         warn!("inotify_add_watch failed, falling back to polling");
         return poll_for_sdcard(timeout);
@@ -487,6 +491,7 @@ fn wait_for_sdcard(timeout: Duration) -> bool {
             revents: 0,
         };
         let timeout_ms = remaining.as_millis().min(1000) as i32;
+        // SAFETY: pfd is a valid pollfd struct; fd is a valid open inotify descriptor.
         let ret = unsafe { libc::poll(&mut pfd, 1, timeout_ms) };
         if ret < 0 {
             let err = std::io::Error::last_os_error();
@@ -498,10 +503,12 @@ fn wait_for_sdcard(timeout: Duration) -> bool {
 
         if ret > 0 && (pfd.revents & libc::POLLIN) != 0 {
             let mut buf = [0u8; 4096];
+            // SAFETY: fd is a valid open inotify descriptor; buf is a stack-allocated array.
             unsafe { libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()); }
         }
     };
 
+    // SAFETY: fd is a valid open file descriptor from inotify_init1 above.
     unsafe { libc::close(fd); }
 
     if result {

@@ -39,7 +39,7 @@ fn set_verbose_marker(enabled: bool) -> Result<()> {
 fn persist_verbose_config(enabled: bool) {
     if let Ok(mut config) = crate::core::config::ZeroMountConfig::load(None) {
         config.logging.verbose = enabled;
-        let _ = config.save(None);
+        let _ = config.save();
     }
 }
 

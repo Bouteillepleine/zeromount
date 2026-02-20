@@ -208,6 +208,17 @@ impl Default for BreneConfig {
     }
 }
 
+impl BreneConfig {
+    pub fn validate_paths(&self) -> Result<()> {
+        for path in self.custom_sus_paths.iter().chain(&self.custom_sus_maps) {
+            if !path.starts_with('/') || path.contains('\0') {
+                anyhow::bail!("invalid sus path: {path:?} (must be absolute, no NUL)");
+            }
+        }
+        Ok(())
+    }
+}
+
 // -- Uname spoofing --
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -315,14 +326,14 @@ impl ZeroMountConfig {
             .with_context(|| format!("reading {}", config_path.display()))?;
         let config: Self = toml::from_str(&content)
             .with_context(|| format!("parsing {}", config_path.display()))?;
+        config.brene.validate_paths()
+            .with_context(|| format!("invalid sus paths in {}", config_path.display()))?;
         tracing::debug!(path = %config_path.display(), "config loaded");
         Ok(config)
     }
 
-    pub fn save(&self, path: Option<&Path>) -> Result<()> {
-        let config_path = path
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_PATH));
+    pub fn save(&self) -> Result<()> {
+        let config_path = PathBuf::from(DEFAULT_CONFIG_PATH);
 
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)

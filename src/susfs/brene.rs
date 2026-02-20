@@ -421,6 +421,7 @@ fn bind_mount_font_files(font_dir: &Path, system_font_dir: &str) -> u32 {
             Err(_) => continue,
         };
 
+        // SAFETY: CStrings are non-null NUL-terminated; null pointers for unused mount(2) args are valid.
         let ret = unsafe {
             libc::mount(
                 c_src.as_ptr(),
@@ -711,7 +712,7 @@ pub fn import_susfs_config(config: &mut ZeroMountConfig) -> Result<bool> {
     }
 
     if changed {
-        config.save(None)?;
+        config.save()?;
     }
 
     Ok(changed)
