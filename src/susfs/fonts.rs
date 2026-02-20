@@ -311,7 +311,7 @@ fn mount_font_overlay(module_font_dir: &Path, system_font_dir: &str, overlay_sou
             source.as_ptr(),
             target_c.as_ptr(),
             fstype.as_ptr(),
-            0,
+            libc::MS_RDONLY | libc::MS_NODEV | libc::MS_NOSUID,
             opts_c.as_ptr() as *const libc::c_void,
         )
     };
