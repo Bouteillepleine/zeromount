@@ -2,13 +2,10 @@
 # Deferred post-boot tasks only — mount pipeline runs in metamount.sh.
 MODDIR="${0%/*}"
 
-# Single-instance guard
+# Single-instance guard (atomic via noclobber)
 LOCKFILE="/dev/zeromount_lock"
-if [ -f "$LOCKFILE" ]; then
-    exit 0
-fi
-echo $$ > "$LOCKFILE"
-trap 'kill 0 2>/dev/null; rm -f "$LOCKFILE"' EXIT
+( set -o noclobber; echo $$ > "$LOCKFILE" ) 2>/dev/null || exit 0
+trap 'rm -f "$LOCKFILE"' EXIT
 trap 'exit 0' INT TERM
 
 . "$MODDIR/common.sh"
@@ -61,3 +58,5 @@ spoof_props
 
 # Deferred SUSFS — waits for sdcard decryption via inotify, then retries path hiding
 "$BIN" mount --susfs-retry --wait &
+_susfs_pid=$!
+trap 'kill $_susfs_pid 2>/dev/null; rm -f "$LOCKFILE"' EXIT
