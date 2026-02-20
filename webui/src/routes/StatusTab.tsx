@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createMemo, For, Show, onMount, onCleanup } from 'solid-js';
+import { createSignal, createMemo, For, Show, onMount } from 'solid-js';
 import { Card } from '../components/core/Card';
 import { Button } from '../components/core/Button';
 import { Skeleton } from '../components/core/Skeleton';
@@ -9,7 +9,6 @@ import type { MountStrategy } from '../lib/types';
 import './StatusTab.css';
 
 export function StatusTab() {
-  const [pulseScale, setPulseScale] = createSignal(1);
   const [animatedActiveRules, setAnimatedActiveRules] = createSignal(0);
   const [animatedExcludedUids, setAnimatedExcludedUids] = createSignal(0);
   const [showAllActivity, setShowAllActivity] = createSignal(false);
@@ -95,16 +94,6 @@ export function StatusTab() {
   const heroStatusLabel = createMemo(() => {
     if (isVfsMode()) return store.engineActive() ? 'Engine Active' : 'Engine Inactive';
     return isModuleActive() ? 'Mounts Active' : 'No Modules Loaded';
-  });
-
-  createEffect(() => {
-    if (store.engineActive()) {
-      const interval = setInterval(() => {
-        setPulseScale(1.03);
-        setTimeout(() => setPulseScale(1), 150);
-      }, 3000);
-      onCleanup(() => clearInterval(interval));
-    }
   });
 
   onMount(() => {
@@ -265,7 +254,6 @@ export function StatusTab() {
 
             <div
               class={`status-hero__shield ${isModuleActive() ? 'status-hero__shield--active' : ''}`}
-              style={{ transform: `scale(${pulseScale()})` }}
             >
               <div
                 class={`status-hero__glow ${isModuleActive() ? 'status-hero__glow--active' : 'status-hero__glow--inactive'}`}

@@ -9,6 +9,7 @@ import { ChipSelect } from '../components/ui/ChipSelect';
 import { store } from '../lib/store';
 import { GITHUB_URL, PATHS } from '../lib/constants';
 import { ksuExec } from '../lib/ksuApi';
+import { escapeShellArg } from '../lib/api';
 import type { BreneSettings, SusfsSettings, UnameMode, MountStrategy, StorageMode } from '../lib/types';
 import "./SettingsTab.css";
 
@@ -60,7 +61,7 @@ export function SettingsTab() {
 
     const outPath = '/sdcard/zeromount-debug.txt';
     try {
-      const { errno } = await ksuExec(`echo '${info.replace(/'/g, "'\\''")}' > ${outPath}`);
+      const { errno } = await ksuExec(`echo ${escapeShellArg(info)} > ${outPath}`);
       if (errno === 0) {
         store.showToast(`Debug info saved to ${outPath}`, 'success');
       } else {

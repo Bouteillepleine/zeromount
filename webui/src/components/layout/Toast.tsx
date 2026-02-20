@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { Show, createEffect, createSignal } from 'solid-js';
 import { theme } from '../../lib/theme';
 import { store } from '../../lib/store';
 
@@ -58,44 +58,21 @@ export function Toast(props: ToastProps) {
   const [opacity, setOpacity] = createSignal(0);
   const [translateY, setTranslateY] = createSignal(20);
   const [mounted, setMounted] = createSignal(false);
-  const [progress, setProgress] = createSignal(100);
-
-  let progressRaf: number | undefined;
-  let startTime: number | undefined;
 
   const duration = () => props.duration || 3000;
-
-  const animateProgress = () => {
-    if (!startTime) startTime = performance.now();
-    const elapsed = performance.now() - startTime;
-    const remaining = Math.max(0, 100 - (elapsed / duration()) * 100);
-    setProgress(remaining);
-
-    if (remaining > 0) {
-      progressRaf = requestAnimationFrame(animateProgress);
-    }
-  };
 
   createEffect(() => {
     if (props.visible) {
       setMounted(true);
-      startTime = undefined;
-      setProgress(100);
       requestAnimationFrame(() => {
         setOpacity(1);
         setTranslateY(0);
-        progressRaf = requestAnimationFrame(animateProgress);
       });
     } else {
-      if (progressRaf) cancelAnimationFrame(progressRaf);
       setOpacity(0);
       setTranslateY(8);
       setTimeout(() => setMounted(false), 1500);
     }
-  });
-
-  onCleanup(() => {
-    if (progressRaf) cancelAnimationFrame(progressRaf);
   });
 
   const cfg = () => typeConfig[props.type] || typeConfig.info;
@@ -104,6 +81,7 @@ export function Toast(props: ToastProps) {
     <Show when={mounted()}>
       <div
         style={`
+          --toast-duration: ${duration()}ms;
           position: fixed;
           bottom: 100px;
           left: 50%;
@@ -143,10 +121,11 @@ export function Toast(props: ToastProps) {
             bottom: 0;
             left: 0;
             height: 2px;
-            width: ${progress()}%;
+            width: 100%;
             background: linear-gradient(90deg, ${cfg().accent()}, transparent);
             border-radius: 0 1px 1px 0;
-            transition: none;
+            transform-origin: left center;
+            animation: toast-progress var(--toast-duration) linear forwards;
           `}
         />
       </div>

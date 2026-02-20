@@ -139,7 +139,7 @@
   border-radius: 12px;
   background: var(--bg-surface);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .settings__theme--active {
@@ -176,7 +176,7 @@
   border-radius: 12px;
   background: var(--bg-surface);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   text-align: center;
   color: inherit;
   font: inherit;
@@ -228,7 +228,7 @@
   border-radius: 50%;
   border: 3px solid transparent;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
 }
 
 .settings__color--active {
@@ -318,7 +318,7 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: opacity 0.25s ease, background-color 0.25s ease;
   letter-spacing: 0.02em;
   overflow: hidden;
 }
@@ -427,7 +427,7 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
   -webkit-appearance: none;
   appearance: none;
   -webkit-tap-highlight-color: transparent;
@@ -495,7 +495,7 @@
   font-family: 'Inter', system-ui, sans-serif;
   font-size: 15px;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, background-color 0.2s ease;
 }
 
 .settings__repo-btn:hover {

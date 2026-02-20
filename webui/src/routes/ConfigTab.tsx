@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, Show, onMount, onCleanup } from 'solid-js';
+import { createSignal, createEffect, createMemo, For, Show, onMount, onCleanup } from 'solid-js';
 import { Card } from '../components/core/Card';
 import { Button } from '../components/core/Button';
 import { Input } from '../components/core/Input';
@@ -117,9 +117,9 @@ export function ConfigTab() {
     observers.clear();
   });
 
-  const excludedUidSet = () => new Set(store.excludedUids().map(e => e.uid));
+  const excludedUidSet = createMemo(() => new Set(store.excludedUids().map(e => e.uid)));
 
-  const filteredExcluded = () => {
+  const filteredExcluded = createMemo(() => {
     const query = debouncedQuery().toLowerCase();
     const excluded = store.excludedUids();
     if (!query) return excluded;
@@ -129,9 +129,9 @@ export function ConfigTab() {
         item.packageName.toLowerCase().includes(query) ||
         item.uid.toString().includes(query)
     );
-  };
+  });
 
-  const filteredApps = () => {
+  const filteredApps = createMemo(() => {
     const query = debouncedQuery().toLowerCase();
     const excluded = excludedUidSet();
     let apps = store.installedApps().filter(app => !excluded.has(app.uid));
@@ -150,7 +150,7 @@ export function ConfigTab() {
     }
 
     return apps.sort((a, b) => a.appName.localeCompare(b.appName));
-  };
+  });
 
   const handleExcludeApp = async (app: InstalledApp) => {
     await store.excludeUid(app.uid, app.packageName, app.appName);

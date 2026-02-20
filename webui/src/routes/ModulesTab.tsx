@@ -1,4 +1,4 @@
-import { createSignal, For, Show, onMount } from 'solid-js';
+import { createSignal, createMemo, For, Show, onMount } from 'solid-js';
 import { Card } from '../components/core/Card';
 import { Button } from '../components/core/Button';
 import { Input } from '../components/core/Input';
@@ -21,14 +21,17 @@ export function ModulesTab() {
     }
   });
 
+  const fontModulesSet = createMemo(() => new Set(store.fontModules()));
+  const moduleStatusMap = createMemo(() => new Map(store.moduleStatuses().map(s => [s.id, s])));
+
   const isFontModule = (mod: KsuModule) => {
     const name = mod.path.split('/').pop() || '';
-    return store.fontModules().includes(name);
+    return fontModulesSet().has(name);
   };
 
   const getModuleStatus = (mod: KsuModule) => {
     const name = mod.path.split('/').pop() || '';
-    return store.moduleStatuses().find(s => s.id === name);
+    return moduleStatusMap().get(name);
   };
 
   const isEffectivelyLoaded = (mod: KsuModule) =>
@@ -43,7 +46,7 @@ export function ModulesTab() {
     return { text: 'Loaded', variant: 'success' };
   };
 
-  const filteredModules = () => {
+  const filteredModules = createMemo(() => {
     const query = searchQuery().toLowerCase();
     if (!query) return store.ksuModules();
     return store.ksuModules().filter(
@@ -51,7 +54,7 @@ export function ModulesTab() {
         mod.name.toLowerCase().includes(query) ||
         mod.path.toLowerCase().includes(query)
     );
-  };
+  });
 
   const handleToggleModule = async (mod: KsuModule) => {
     setLoadingModules(prev => {

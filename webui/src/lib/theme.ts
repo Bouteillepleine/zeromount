@@ -188,6 +188,13 @@ export function applyTheme(themeObj: typeof darkTheme, accentColor?: string) {
   root.style.setProperty('--shadow-small', themeObj.shadowSmall);
   root.style.setProperty('--shadow-medium', themeObj.shadowMedium);
   root.style.setProperty('--shadow-large', themeObj.shadowLarge);
+  root.style.setProperty('--font-body', themeObj.fontBody);
+  root.style.setProperty('--font-mono', themeObj.fontMono);
+  root.style.setProperty('--font-display', themeObj.fontDisplay);
+  root.style.setProperty('--radius-small', themeObj.radiusSmall);
+  root.style.setProperty('--radius-medium', themeObj.radiusMedium);
+  root.style.setProperty('--radius-large', themeObj.radiusLarge);
+  root.style.setProperty('--radius-xlarge', themeObj.radiusXLarge);
 
   // Apply accent-based styles
   const accentStyles = getAccentStyles(accentColor || '#FF6B6B');
@@ -208,10 +215,3 @@ export function applyAccent(accentColor: string) {
   root.style.setProperty('--text-on-accent', accentStyles.textOnAccent);
   root.style.setProperty('--shadow-glow', `0 0 20px rgba(${accentStyles.rgb}, 0.3)`);
 }
-
-export const springConfigs = {
-  snappy: { mass: 1, stiffness: 300, damping: 20 },
-  bouncy: { mass: 1, stiffness: 200, damping: 10 },
-  smooth: { mass: 1, stiffness: 100, damping: 20 },
-  elastic: { mass: 1, stiffness: 400, damping: 8 },
-};

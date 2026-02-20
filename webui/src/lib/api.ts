@@ -9,7 +9,7 @@ async function getMock() {
   return _mockModule!.MockAPI;
 }
 
-function escapeShellArg(arg: string): string {
+export function escapeShellArg(arg: string): string {
   return "'" + arg.replace(/'/g, "'\\''") + "'";
 }
 
@@ -592,25 +592,16 @@ echo "]"
         `find ${escapeShellArg(modulePath)} -type f \\( -path "*/system/*" -o -path "*/vendor/*" -o -path "*/product/*" \\) 2>/dev/null`
       );
       const files = stdout.trim().split('\n').filter(Boolean);
+      const cmds = files.flatMap(filePath => {
+        const rel = filePath.replace(modulePath, '');
+        if (!rel.startsWith('/system/') && !rel.startsWith('/vendor/') && !rel.startsWith('/product/')) return [];
+        return [`${PATHS.BINARY} vfs add ${escapeShellArg(rel)} ${escapeShellArg(filePath)} && echo OK || echo FAIL`];
+      });
+
       let addedCount = 0;
-
-      for (const filePath of files) {
-        const relativePath = filePath.replace(modulePath, '');
-        let targetPath = '';
-
-        if (relativePath.startsWith('/system/')) {
-          targetPath = relativePath;
-        } else if (relativePath.startsWith('/vendor/')) {
-          targetPath = relativePath;
-        } else if (relativePath.startsWith('/product/')) {
-          targetPath = relativePath;
-        } else {
-          continue;
-        }
-
-        const cmd = `${PATHS.BINARY} vfs add ${escapeShellArg(targetPath)} ${escapeShellArg(filePath)}`;
-        const { errno } = await ksuExec(cmd);
-        if (errno === 0) addedCount++;
+      if (cmds.length > 0) {
+        const { stdout: batchOut } = await ksuExec(cmds.join('\n'));
+        addedCount = (batchOut.match(/\bOK\b/g) ?? []).length;
       }
 
       await logActivity('MODULE_LOADED', `${moduleName}: ${addedCount} rules added`);
@@ -631,12 +622,12 @@ echo "]"
     try {
       const rules = await this.getRules();
       const moduleRules = rules.filter(r => r.source.startsWith(modulePath));
-      let removedCount = 0;
+      const cmds = moduleRules.map(r => `${PATHS.BINARY} vfs del ${escapeShellArg(r.target)} && echo OK || echo FAIL`);
 
-      for (const rule of moduleRules) {
-        const cmd = `${PATHS.BINARY} vfs del ${escapeShellArg(rule.target)}`;
-        const { errno } = await ksuExec(cmd);
-        if (errno === 0) removedCount++;
+      let removedCount = 0;
+      if (cmds.length > 0) {
+        const { stdout: batchOut } = await ksuExec(cmds.join('\n'));
+        removedCount = (batchOut.match(/\bOK\b/g) ?? []).length;
       }
 
       await logActivity('MODULE_UNLOADED', `${moduleName}: ${removedCount} rules removed`);

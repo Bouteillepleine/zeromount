@@ -219,12 +219,6 @@
   display: none;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .config__app--skeleton {
   background: transparent;
   border: 1px solid var(--glass-border);

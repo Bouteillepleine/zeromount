@@ -81,24 +81,26 @@ export async function getPackagesInfo(packageNames: string[]): Promise<PackagesI
     } catch { /* fallback */ }
   }
 
-  const results: PackagesInfo[] = [];
-  for (const packageName of packageNames) {
-    if (!isValidPackageName(packageName)) {
-      results.push({ packageName, appLabel: packageName, versionName: '', versionCode: 0, isSystem: false, uid: -1 });
-      continue;
+  const valid = packageNames.filter(isValidPackageName);
+  const invalid = packageNames.filter(p => !isValidPackageName(p));
+
+  const results: PackagesInfo[] = invalid.map(packageName => ({
+    packageName, appLabel: packageName, versionName: '', versionCode: 0, isSystem: false, uid: -1,
+  }));
+
+  if (valid.length > 0) {
+    const script = valid.map(pkg =>
+      `label=$(pm path ${pkg} 2>/dev/null | head -1 | sed 's/package://' | xargs -I{} aapt dump badging {} 2>/dev/null | grep "application-label:" | head -1 | sed "s/application-label:'\\(.*\\)'/\\1/"); printf '%s\\t%s\\n' ${pkg} "\${label:-}"`
+    ).join('\n');
+    const { stdout } = await ksuExec(script);
+    const lines = stdout.trim().split('\n').filter(Boolean);
+    const labelMap = new Map(lines.map(l => { const [pkg, ...rest] = l.split('\t'); return [pkg, rest.join('\t')]; }));
+    for (const packageName of valid) {
+      const appLabel = labelMap.get(packageName)?.trim() || packageName;
+      results.push({ packageName, appLabel, versionName: '', versionCode: 0, isSystem: false, uid: -1 });
     }
-    const { stdout, errno } = await ksuExec(
-      `pm path ${packageName} 2>/dev/null | head -1 | sed 's/package://' | xargs -I{} aapt dump badging {} 2>/dev/null | grep "application-label:" | head -1 | sed "s/application-label:'\\(.*\\)'/\\1/"`
-    );
-    results.push({
-      packageName,
-      appLabel: errno === 0 && stdout.trim() ? stdout.trim() : packageName,
-      versionName: '',
-      versionCode: 0,
-      isSystem: false,
-      uid: -1,
-    });
   }
+
   return results;
 }
 

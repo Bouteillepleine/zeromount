@@ -856,13 +856,13 @@ function createAppStore() {
     }
   };
 
-  const activeStrategy = (): MountStrategy => {
+  const activeStrategy = createMemo((): MountStrategy => {
     if (settings.mount.overlay_preferred && settings.mount.magic_mount_fallback) return 'Vfs';
     if (settings.mount.overlay_preferred && !settings.mount.magic_mount_fallback) return 'Overlay';
     return 'MagicMount';
-  };
+  });
 
-  const effectiveStrategy = (): MountStrategy => {
+  const effectiveStrategy = createMemo((): MountStrategy => {
     const strategy = activeStrategy();
     const caps = capabilities();
     // Capabilities not loaded yet — show config-based strategy, not MagicMount fallback
@@ -874,7 +874,7 @@ function createAppStore() {
       return 'MagicMount';
     }
     return strategy;
-  };
+  });
 
   const loadRuntimeStatus = async () => {
     try {
