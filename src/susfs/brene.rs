@@ -50,7 +50,7 @@ const ZYGISK_MAP_PATTERNS: &[&str] = &[
 
 const SYSTEM_FONTS_DIR: &str = "/system/fonts";
 const MODULES_DIR: &str = "/data/adb/modules";
-const FONT_STAGING_DIR: &str = "/data/local/tmp/.zm/fonts";
+const FONT_STAGING_DIR: &str = "/data/adb/zeromount/fonts";
 
 const DEX2OAT_UMOUNT_PATHS: &[&str] = &[
     "/system/apex/com.android.art/bin/dex2oat",
@@ -369,11 +369,11 @@ fn stage_font_file(source: &Path, filename: &str) -> Option<PathBuf> {
     let staging_dir = Path::new(FONT_STAGING_DIR);
     if !staging_dir.exists() {
         fs::create_dir_all(staging_dir).ok()?;
-        fs::set_permissions(staging_dir, fs::Permissions::from_mode(0o755)).ok()?;
+        fs::set_permissions(staging_dir, fs::Permissions::from_mode(0o700)).ok()?;
     }
     let dest = staging_dir.join(filename);
     fs::copy(source, &dest).ok()?;
-    fs::set_permissions(&dest, fs::Permissions::from_mode(0o644)).ok()?;
+    fs::set_permissions(&dest, fs::Permissions::from_mode(0o600)).ok()?;
     Some(dest)
 }
 
