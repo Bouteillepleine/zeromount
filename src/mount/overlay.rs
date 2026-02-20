@@ -162,7 +162,7 @@ fn build_lowerdir_string(lower_dirs: &[&Path], target: &Path, decoy_dir: Option<
 
 /// Escape colons and backslashes in overlay path options (legacy API requirement).
 fn escape_overlay_path(path: &str) -> String {
-    path.replace('\\', "\\\\").replace(',', "\\,")
+    path.replace('\\', "\\\\").replace(':', "\\:").replace(',', "\\,")
 }
 
 /// New mount API: fsopen -> fsconfig -> fsmount -> move_mount (Linux 5.2+).
