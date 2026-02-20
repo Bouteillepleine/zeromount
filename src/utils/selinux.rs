@@ -1,7 +1,7 @@
 use std::ffi::CString;
 use std::path::Path;
 
-// Best-effort SELinux context copy. Falls back to u:object_r:system_file:s0.
+// Best-effort SELinux context copy. Falls back to u:object_r:system_data_file:s0.
 // Uses lgetxattr/lsetxattr to avoid following symlinks.
 pub fn copy_selinux_context(source: &Path, dest: &Path) {
     let src_c = match CString::new(source.to_string_lossy().as_bytes()) {
