@@ -154,11 +154,11 @@ impl VfsDriver {
         self.fd.as_raw_fd()
     }
 
-    // SAFETY: fd is a valid open descriptor from VfsDriver::open; data is a valid mutable pointer.
     /// Inject a VFS redirection rule into the kernel driver.
     pub fn add_rule(&self, source: &Path, target: &Path, is_dir: bool) -> Result<()> {
         let rule = VfsRule::new(source, target, is_dir)?;
         let mut data = rule.as_ioctl_data();
+        // SAFETY: fd is a valid open descriptor from VfsDriver::open; data is a valid mutable pointer.
         unsafe {
             raw_ioctl(
                 self.raw_fd(),
@@ -188,11 +188,11 @@ impl VfsDriver {
         let mut data = IoctlData {
             virtual_path: vp.as_ptr(),
             real_path: rp.as_ptr(),
-            // SAFETY: fd is a valid open descriptor from VfsDriver::open; data is a valid mutable pointer.
             flags: 0,
             #[cfg(target_pointer_width = "64")]
             _pad: 0,
         };
+        // SAFETY: fd is a valid open descriptor from VfsDriver::open; data is a valid mutable pointer.
         unsafe {
             raw_ioctl(
                 self.raw_fd(),
@@ -201,11 +201,11 @@ impl VfsDriver {
             )?;
         }
         Ok(())
-    // SAFETY: fd is a valid open descriptor from VfsDriver::open; null arg is valid for CLEAR_ALL.
     }
 
     /// Clear all rules. NOTE: leaks dirs_ht entries per CO01.
     pub fn clear_all(&self) -> Result<()> {
+        // SAFETY: fd is a valid open descriptor from VfsDriver::open; null arg is valid for CLEAR_ALL.
         unsafe {
             raw_ioctl(
                 self.raw_fd(),
@@ -216,11 +216,10 @@ impl VfsDriver {
         Ok(())
     }
 
-// SAFETY: fd is a valid open descriptor from VfsDriver::open; version is a valid mutable i32.
-
     /// Query driver version. Only ioctl NOT requiring CAP_SYS_ADMIN.
     pub fn get_version(&self) -> Result<u32> {
         let mut version: i32 = 0;
+        // SAFETY: fd is a valid open descriptor from VfsDriver::open; version is a valid mutable i32.
         let ret = unsafe {
             raw_ioctl(
                 self.raw_fd(),
@@ -233,11 +232,10 @@ impl VfsDriver {
         Ok(ver)
     }
 
-// SAFETY: fd is a valid open descriptor from VfsDriver::open; uid_val is a valid mutable u32.
-
     /// Exclude a UID from VFS redirection.
     pub fn add_uid(&self, uid: u32) -> Result<()> {
         let mut uid_val = uid;
+        // SAFETY: fd is a valid open descriptor from VfsDriver::open; uid_val is a valid mutable u32.
         unsafe {
             raw_ioctl(
                 self.raw_fd(),
@@ -248,11 +246,10 @@ impl VfsDriver {
         Ok(())
     }
 
-// SAFETY: fd is a valid open descriptor from VfsDriver::open; uid_val is a valid mutable u32.
-
     /// Re-include a previously excluded UID.
     pub fn del_uid(&self, uid: u32) -> Result<()> {
         let mut uid_val = uid;
+        // SAFETY: fd is a valid open descriptor from VfsDriver::open; uid_val is a valid mutable u32.
         unsafe {
             raw_ioctl(
                 self.raw_fd(),
@@ -263,11 +260,11 @@ impl VfsDriver {
         Ok(())
     }
 
-    // SAFETY: fd is a valid open descriptor from VfsDriver::open; buf is a valid mutable slice.
     /// List current VFS rules. Returns raw text from kernel.
     pub fn get_list(&self) -> Result<String> {
         // Kernel writes rule list into the provided buffer and returns byte count
         let mut buf = vec![0u8; 65536];
+        // SAFETY: fd is a valid open descriptor from VfsDriver::open; buf is a valid mutable slice.
         let ret = unsafe {
             raw_ioctl(
                 self.raw_fd(),
@@ -278,11 +275,11 @@ impl VfsDriver {
         let len = ret as usize;
         buf.truncate(len);
         String::from_utf8(buf).context("kernel returned non-UTF8 rule list")
-    // SAFETY: fd is a valid open descriptor from VfsDriver::open; null arg is valid for ENABLE.
     }
 
     /// Enable the VFS engine.
     pub fn enable(&self) -> Result<()> {
+        // SAFETY: fd is a valid open descriptor from VfsDriver::open; null arg is valid for ENABLE.
         unsafe {
             raw_ioctl(
                 self.raw_fd(),
@@ -291,11 +288,11 @@ impl VfsDriver {
             )?;
         }
         Ok(())
-    // SAFETY: fd is a valid open descriptor from VfsDriver::open; null arg is valid for DISABLE.
     }
 
     /// Disable the VFS engine.
     pub fn disable(&self) -> Result<()> {
+        // SAFETY: fd is a valid open descriptor from VfsDriver::open; null arg is valid for DISABLE.
         unsafe {
             raw_ioctl(
                 self.raw_fd(),
@@ -304,11 +301,11 @@ impl VfsDriver {
             )?;
         }
         Ok(())
-    // SAFETY: fd is a valid open descriptor from VfsDriver::open; null arg is valid for REFRESH.
     }
 
     /// Force dcache refresh after rule changes. Was missing from zm.c (BUG-M1).
     pub fn refresh(&self) -> Result<()> {
+        // SAFETY: fd is a valid open descriptor from VfsDriver::open; null arg is valid for REFRESH.
         unsafe {
             raw_ioctl(
                 self.raw_fd(),
@@ -319,11 +316,11 @@ impl VfsDriver {
         Ok(())
     }
 
-    // SAFETY: fd is a valid open descriptor from VfsDriver::open; status_val is a valid mutable i32.
     /// Query engine status. Returns None if kernel lacks GET_STATUS (old kernel).
     /// Backward-compatible: ENOTTY or EINVAL means the ioctl doesn't exist.
     pub fn get_status(&self) -> Result<Option<VfsStatus>> {
         let mut status_val: i32 = 0;
+        // SAFETY: fd is a valid open descriptor from VfsDriver::open; status_val is a valid mutable i32.
         let result = unsafe {
             raw_ioctl(
                 self.raw_fd(),
