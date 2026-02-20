@@ -49,7 +49,7 @@ pub fn copy_selinux_context(source: &Path, dest: &Path) {
         }
     }
 
-    let context = b"u:object_r:system_file:s0\0";
+    let context = b"u:object_r:system_data_file:s0\0";
     unsafe {
         let ret = libc::lsetxattr(
             dst_c.as_ptr(),
