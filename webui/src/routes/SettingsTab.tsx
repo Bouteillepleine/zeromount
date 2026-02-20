@@ -214,6 +214,7 @@ export function SettingsTab() {
               class="settings__slider"
               min="0"
               max="100"
+              step="10"
               value={Math.round(store.bgOpacity() * 100)}
               onInput={(e) => store.setBgOpacity(parseInt(e.currentTarget.value) / 100)}
             />
@@ -686,13 +687,6 @@ export function SettingsTab() {
           </div>
           <Toggle checked={store.settings.brene.prop_spoofing} onChange={(v) => handleBreneToggle('prop_spoofing', v)} />
         </div>
-        <div class="settings__item">
-          <div class="settings__item-content">
-            <div class="settings__item-label">Hide Stock Overlays</div>
-            <div class="settings__item-desc">Hide overlay filesystem artifacts from detection processes</div>
-          </div>
-          <Toggle checked={store.settings.mount.hide_stock_overlays} onChange={(v) => store.setMountToggle('hide_stock_overlays', v)} />
-        </div>
       </Card>
 
       <Card>
@@ -773,8 +767,8 @@ export function SettingsTab() {
                     store.showToast('Failed to import config', 'error');
                     return;
                   }
-                  await store.loadInitialData();
-                  store.showToast('Config imported — reload complete', 'success');
+                  store.showToast('Config imported — reloading...', 'success');
+                  setTimeout(() => location.reload(), 500);
                 } catch {
                   store.showToast('Failed to import config', 'error');
                 }

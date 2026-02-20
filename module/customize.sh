@@ -62,30 +62,29 @@ zm_print "  ✅ Binary ready"
 ZM_DATA="/data/adb/zeromount"
 zm_print "📁 Preparing Data" 0.3 "h"
 
-# Clean install — wipe previous state so every install starts fresh
+# Preserve user config across upgrades, wipe transient state
 if [ -d "$ZM_DATA" ]; then
+    for f in config.toml .exclusion_list .exclusion_meta.json; do
+        [ -f "$ZM_DATA/$f" ] && cp "$ZM_DATA/$f" "/data/local/tmp/.zm_backup_$f"
+    done
     rm -rf "$ZM_DATA"
-    zm_print "  🧹 Previous installation cleaned"
+    mkdir -p "$ZM_DATA"
+    for f in config.toml .exclusion_list .exclusion_meta.json; do
+        [ -f "/data/local/tmp/.zm_backup_$f" ] && mv "/data/local/tmp/.zm_backup_$f" "$ZM_DATA/$f"
+    done
+    zm_print "  🔄 Config preserved, state reset"
+else
+    mkdir -p "$ZM_DATA"
 fi
 
-mkdir -p "$ZM_DATA"
 mkdir -p "$ZM_DATA/logs"
 zm_print "  ✅ Data directory ready"
 
-zm_print "  🔧 Writing default config"
-"$BIN" config defaults > "$ZM_DATA/config.toml" 2>/dev/null || true
+if [ ! -f "$ZM_DATA/config.toml" ]; then
+    zm_print "  🔧 Writing default config"
+    "$BIN" config defaults > "$ZM_DATA/config.toml" 2>/dev/null || true
+fi
 
-# Xiaomi/Redmi/POCO devices have mi_ext overlay mounts that trigger detection
-BRAND=$(getprop ro.product.brand 2>/dev/null | tr '[:upper:]' '[:lower:]')
-MANUFACTURER=$(getprop ro.product.manufacturer 2>/dev/null | tr '[:upper:]' '[:lower:]')
-case "$BRAND$MANUFACTURER" in
-    *xiaomi*|*redmi*|*poco*)
-        if ! grep -q 'hide_stock_overlays' "$ZM_DATA/config.toml" 2>/dev/null; then
-            sed -i '/^\[mount\]/a hide_stock_overlays = true' "$ZM_DATA/config.toml"
-            zm_print "  🔧 Xiaomi device detected — stock overlay hiding enabled"
-        fi
-        ;;
-esac
 
 zm_print "🛡️ SUSFS Detection" 0.3 "h"
 
