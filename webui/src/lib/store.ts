@@ -62,12 +62,11 @@ function createAppStore() {
   const [lastApiError, setLastApiError] = createSignal<{ operation: string; error: unknown; timestamp: Date } | null>(null);
 
   const savedBgOpacity = typeof window !== 'undefined'
-    ? parseFloat(localStorage.getItem('zeromount-bgOpacity') ?? '0.40')
-    : 0.40;
-  const [bgOpacity, _setBgOpacity] = createSignal(isNaN(savedBgOpacity) ? 0.40 : savedBgOpacity);
+    ? parseFloat(localStorage.getItem('zeromount-bgOpacity') ?? '0.35')
+    : 0.35;
+  const [bgOpacity, _setBgOpacity] = createSignal(isNaN(savedBgOpacity) ? 0.35 : savedBgOpacity);
   const setBgOpacity = (value: number) => {
-    const snapped = Math.round(value * 10) / 10;
-    const clamped = Math.max(0, Math.min(1, snapped));
+    const clamped = Math.max(0, Math.min(1, value));
     _setBgOpacity(clamped);
     localStorage.setItem('zeromount-bgOpacity', String(clamped));
     document.documentElement.style.setProperty('--bg-opacity', String(clamped));
@@ -133,6 +132,7 @@ function createAppStore() {
     random_mount_paths: true,
     mount_source: 'auto',
     overlay_source: 'auto',
+    hide_stock_overlays: false,
   };
 
   const defaultPerf: PerfSettings = {
@@ -892,6 +892,7 @@ function createAppStore() {
       if (m.random_mount_paths != null) mount.random_mount_paths = typeof m.random_mount_paths === 'boolean' ? m.random_mount_paths : String(m.random_mount_paths) === 'true';
       if (m.mount_source != null) mount.mount_source = String(m.mount_source);
       if (m.overlay_source != null) mount.overlay_source = String(m.overlay_source);
+      if (m.hide_stock_overlays != null) mount.hide_stock_overlays = typeof m.hide_stock_overlays === 'boolean' ? m.hide_stock_overlays : String(m.hide_stock_overlays) === 'true';
       setSettings('mount', prev => ({ ...prev, ...mount }));
       console.log('[ZM-Store] loadMountSettings() loaded from dump:', mount);
       return;
@@ -899,7 +900,7 @@ function createAppStore() {
 
     // Fallback: individual configGet calls — all in a single Promise.allSettled
     const boolKeys: (keyof MountSettings)[] = [
-      'overlay_preferred', 'magic_mount_fallback', 'random_mount_paths',
+      'overlay_preferred', 'magic_mount_fallback', 'random_mount_paths', 'hide_stock_overlays',
     ];
     const results = await Promise.allSettled([
       api.configGet('mount.storage_mode'),
@@ -959,12 +960,15 @@ function createAppStore() {
     }
   };
 
-  const setMountToggle = async (key: 'overlay_preferred' | 'magic_mount_fallback' | 'random_mount_paths', value: boolean) => {
+  const setMountToggle = async (key: 'overlay_preferred' | 'magic_mount_fallback' | 'random_mount_paths' | 'hide_stock_overlays', value: boolean) => {
     console.log('[ZM-Store] setMountToggle() called:', key, value);
     const prev = settings.mount[key];
     setSettings('mount', key, value);
     try {
       await api.configSet(`mount.${key}`, String(value));
+      if (key === 'hide_stock_overlays') {
+        api.setHideOverlays(value).catch(e => console.warn('[ZM-Store] sysfs hide_overlays write failed:', e));
+      }
       pushActivity('setting_changed', `${key} → ${value ? 'ON' : 'OFF'}`);
       console.log('[ZM-Store] setMountToggle() saved:', key, value);
     } catch (e) {

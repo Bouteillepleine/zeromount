@@ -188,6 +188,8 @@ pub struct RuntimeState {
     pub root_manager: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolved_storage_mode: Option<String>,
+    #[serde(default)]
+    pub stock_overlay_count: u32,
 }
 
 impl Default for RuntimeState {
@@ -210,6 +212,7 @@ impl Default for RuntimeState {
             degradation_reason: None,
             root_manager: None,
             resolved_storage_mode: None,
+            stock_overlay_count: 0,
         }
     }
 }
