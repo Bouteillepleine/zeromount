@@ -55,6 +55,7 @@ if [ "$CLEAN" = true ]; then
 fi
 
 SCRIPTS=(
+    action.sh
     common.sh
     post-fs-data.sh
     metamount.sh
