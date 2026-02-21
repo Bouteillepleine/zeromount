@@ -259,7 +259,7 @@ export function StatusTab() {
                 class={`status-hero__glow ${isModuleActive() ? 'status-hero__glow--active' : 'status-hero__glow--inactive'}`}
                 style={{
                   background: isModuleActive()
-                    ? `radial-gradient(circle, ${store.currentTheme().colorSuccessGlow} 0%, transparent 70%)`
+                    ? `radial-gradient(circle, ${store.currentTheme().colorSuccessGlow} 0%, transparent 60%)`
                     : 'transparent'
                 }}
               />
@@ -269,9 +269,6 @@ export function StatusTab() {
                 height="100"
                 viewBox="0 0 24 24"
                 class="status-hero__shield-svg"
-                style={{
-                  filter: isModuleActive() ? `drop-shadow(0 0 20px ${store.currentTheme().colorSuccessGlow})` : 'none'
-                }}
               >
                 <path
                   fill={isModuleActive() ? store.currentTheme().textOnAccent : store.currentTheme().textTertiary}

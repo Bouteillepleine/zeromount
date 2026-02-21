@@ -59,14 +59,23 @@
 }
 
 .status-hero__shield--active {
-  animation: float 3s ease-in-out infinite, heartbeat 1.5s ease-in-out infinite;
+  animation: shieldFloat 3s ease-in-out infinite;
+}
+
+@keyframes shieldFloat {
+  0%   { transform: translateY(0) scale(1); }
+  14%  { transform: translateY(-1px) scale(1.03); }
+  28%  { transform: translateY(-2px) scale(1); }
+  42%  { transform: translateY(-3px) scale(1.03); }
+  50%  { transform: translateY(-4px) scale(1); }
+  70%  { transform: translateY(-2px) scale(1); }
+  100% { transform: translateY(0) scale(1); }
 }
 
 .status-hero__glow {
   position: absolute;
-  inset: -20px;
+  inset: -30px;
   transition: opacity 0.5s ease;
-  filter: blur(10px);
 }
 
 .status-hero__glow--active {

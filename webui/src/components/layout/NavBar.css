@@ -84,7 +84,6 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 0 8px rgba(var(--accent-rgb), 0.5));
 }
 
 .navbar__tab--active .navbar__icon svg {

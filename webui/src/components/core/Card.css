@@ -1,6 +1,7 @@
 .card {
   border-radius: 24px;
   isolation: isolate;
+  contain: layout style;
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease-out;
 }
 
@@ -9,7 +10,6 @@
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border);
-  will-change: backdrop-filter;
 }
 
 .card--gradient-border {

@@ -20,10 +20,15 @@ export function NavBar(props: NavBarProps) {
   let navRef: HTMLElement | undefined;
 
   onMount(() => {
+    let isScrolling = false;
     const handleScroll = () => {
-      navRef?.classList.add('navbar--scrolling');
+      if (!isScrolling) {
+        isScrolling = true;
+        navRef?.classList.add('navbar--scrolling');
+      }
       clearTimeout(scrollDebounce);
       scrollDebounce = setTimeout(() => {
+        isScrolling = false;
         navRef?.classList.remove('navbar--scrolling');
       }, 150);
     };
