@@ -1296,6 +1296,7 @@ function createAppStore() {
     ksuModules,
     scenario,
     capabilities,
+    susfsMode: () => capabilities()?.susfs_mode || 'absent',
     moduleStatuses,
     fontModules,
     degraded,

@@ -76,7 +76,6 @@ export function SettingsTab() {
   const caps = () => store.capabilities?.() || null;
   const susfsAvailable = () => caps()?.susfs_available ?? false;
   const susfsEnabled = () => susfsAvailable() && store.settings.susfs.enabled;
-
   const handleBreneToggle = (key: keyof BreneSettings, value: boolean) => {
     store.setBreneToggle(key, value);
   };

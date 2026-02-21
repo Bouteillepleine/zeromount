@@ -23,10 +23,13 @@ function strategyColor(s: MountStrategy): string {
   }
 }
 
-// Reflects what's actually running, not just kernel capabilities
-function buildConfig(scenario: string, strategy: MountStrategy | null, susfsEnabled: boolean): IndicatorConfig {
+function buildConfig(scenario: string, strategy: MountStrategy | null, susfsEnabled: boolean, susfsMode?: string): IndicatorConfig {
   const active = strategy || 'Vfs';
-  const susfsLabel = susfsEnabled ? ' + SUSFS' : '';
+  const susfsLabel = susfsMode === 'enhanced'
+    ? ' + Enhanced SUSFS'
+    : susfsMode === 'embedded'
+      ? ' + Embedded SUSFS'
+      : susfsEnabled ? ' + SUSFS' : '';
 
   switch (scenario) {
     case 'full':
@@ -82,7 +85,8 @@ export function ScenarioIndicator() {
   const scenario = () => store.scenario?.() || 'none';
   const activeStrategy = () => store.runtimeStrategy() || store.effectiveStrategy();
   const susfsEnabled = () => (store.capabilities?.()?.susfs_available ?? false) && store.settings.susfs.enabled;
-  const config = createMemo(() => buildConfig(scenario(), activeStrategy(), susfsEnabled()));
+  const susfsMode = () => store.capabilities?.()?.susfs_mode;
+  const config = createMemo(() => buildConfig(scenario(), activeStrategy(), susfsEnabled(), susfsMode()));
   const missing = () => getMissingCapabilities(store.capabilities?.() || null);
 
   return (

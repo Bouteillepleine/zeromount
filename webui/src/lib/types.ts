@@ -39,6 +39,10 @@ export interface CapabilityFlags {
   susfs_open_redirect: boolean;
   susfs_kstat_redirect: boolean;
   susfs_open_redirect_all: boolean;
+  susfs_mode: 'enhanced' | 'embedded' | 'absent';
+  susfs_module_installed: boolean;
+  susfs_module_enabled: boolean;
+  susfs_binary_found: boolean;
   overlay_supported: boolean;
   erofs_supported: boolean;
   tmpfs_xattr: boolean;
