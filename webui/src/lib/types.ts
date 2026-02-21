@@ -168,3 +168,36 @@ export interface Settings {
 export type Scenario = 'full' | 'susfs_frontend' | 'kernel_only' | 'susfs_only' | 'none';
 
 export type Tab = 'status' | 'modules' | 'config' | 'settings';
+
+export interface WebUiInitResponse {
+  status: RuntimeStatus;
+  config: {
+    logging: { verbose: boolean };
+    mount: MountSettings;
+    susfs: SusfsSettings;
+    brene: BreneSettings;
+    uname: UnameSettings;
+    perf: PerfSettings;
+  };
+  system_info: {
+    kernelVersion: string;
+    uptime: string;
+    deviceModel: string;
+    androidVersion: string;
+    selinuxStatus: string;
+  };
+  rules: Array<{ id: string; name: string; source: string; target: string }>;
+  excluded_uids: Array<{
+    uid: number;
+    packageName: string;
+    appName: string;
+    excludedAt: string;
+  }>;
+  activity: Array<{
+    id: string;
+    type: string;
+    message: string;
+    timestamp: string;
+  }>;
+  modules: KsuModule[];
+}

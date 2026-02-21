@@ -1,9 +1,10 @@
 import { createSignal, createRoot, createMemo, createEffect } from 'solid-js';
 import { createStore } from 'solid-js/store';
-import type { Tab, Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo, Settings, InstalledApp, KsuModule, CapabilityFlags, ModuleStatus, BreneSettings, SusfsSettings, PerfSettings, UnameSettings, UnameMode, MountSettings, StorageMode, MountStrategy } from './types';
+import type { Tab, Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo, Settings, InstalledApp, KsuModule, CapabilityFlags, ModuleStatus, BreneSettings, SusfsSettings, PerfSettings, UnameSettings, UnameMode, MountSettings, StorageMode, MountStrategy, WebUiInitResponse } from './types';
 import { api, shouldUseMock } from './api';
 import { listPackages, getPackagesInfo, getAppLabelViaAapt } from './ksuApi';
 import { darkTheme, lightTheme, amoledTheme, applyTheme, getAccentStyles, accentPresets } from './theme';
+import { readCache, writeCache, type HydratableState } from './cache';
 
 function createAppStore() {
   console.log('[ZM-Store] createAppStore() initializing...');
@@ -105,9 +106,9 @@ function createAppStore() {
     susfs_log: false,
     hide_sus_mounts: true,
     emulate_vold_app_data: true,
-    force_hide_lsposed: false,
+    force_hide_lsposed: true,
     spoof_cmdline: false,
-    hide_ksu_loops: false,
+    hide_ksu_loops: true,
     prop_spoofing: true,
   };
 
@@ -238,112 +239,284 @@ function createAppStore() {
     toastTimer = setTimeout(() => setToast(null), ms);
   };
 
+  const hydrateFromCache = () => {
+    const cached = readCache();
+    if (!cached) return false;
+
+    console.log('[ZM-Store] hydrating from cache');
+    setScenario(cached.scenario);
+    setEngineActive(cached.engineActive);
+    setCapabilities(cached.capabilities);
+    setStats(cached.stats);
+    setSystemInfo(cached.systemInfo);
+    setModuleStatuses(cached.moduleStatuses);
+    setFontModules(cached.fontModules);
+    setDegraded(cached.degraded);
+    setDegradationReason(cached.degradationReason);
+    setRootManager(cached.rootManager);
+    setRuntimeStrategy(cached.runtimeStrategy);
+    _setMountSource(cached.mountSource);
+    setResolvedStorageMode(cached.resolvedStorageMode);
+    setRules(cached.rules);
+    setExcludedUids(cached.excludedUids);
+    setActivity(cached.activity);
+    setKsuModules(cached.ksuModules);
+    setSettings('brene', prev => ({ ...prev, ...cached.brene }));
+    setSettings('susfs', prev => ({ ...prev, ...cached.susfs }));
+    setSettings('uname', prev => ({ ...prev, ...cached.uname }));
+    setSettings('mount', prev => ({ ...prev, ...cached.mount }));
+    setSettings({ verboseLogging: cached.verboseLogging });
+    return true;
+  };
+
+  const buildCacheState = (): HydratableState => ({
+    scenario: scenario(),
+    engineActive: engineActive(),
+    capabilities: capabilities(),
+    stats: { ...stats },
+    systemInfo: { ...systemInfo },
+    moduleStatuses: moduleStatuses(),
+    fontModules: fontModules(),
+    degraded: degraded(),
+    degradationReason: degradationReason(),
+    rootManager: rootManager(),
+    runtimeStrategy: runtimeStrategy(),
+    mountSource: mountSource(),
+    resolvedStorageMode: resolvedStorageMode(),
+    rules: rules(),
+    excludedUids: excludedUids(),
+    activity: activity(),
+    ksuModules: ksuModules(),
+    brene: { ...settings.brene },
+    susfs: { ...settings.susfs },
+    uname: { ...settings.uname },
+    mount: { ...settings.mount },
+    verboseLogging: settings.verboseLogging,
+  });
+
+  const applyBatchedResponse = (data: WebUiInitResponse) => {
+    const s = data.status;
+    setScenario(s.scenario as Scenario);
+    setCapabilities(s.capabilities);
+    setModuleStatuses(s.modules);
+    setFontModules(s.font_modules || []);
+    setDegraded(s.degraded);
+    setDegradationReason(s.degradation_reason);
+    setEngineActive(s.engine_active ?? false);
+    if (s.driver_version !== null) setSystemInfo('driverVersion', `v${s.driver_version}`);
+    if (s.susfs_version) setSystemInfo('susfsVersion', s.susfs_version);
+    setRootManager(s.root_manager);
+    setRuntimeStrategy(s.active_strategy ?? null);
+    _setMountSource(s.mount_source ?? null);
+    setResolvedStorageMode(s.resolved_storage_mode ?? null);
+    setStats({
+      activeRules: s.rule_count,
+      excludedUids: s.excluded_uid_count,
+      hiddenPaths: s.hidden_path_count,
+    });
+
+    const si = data.system_info;
+    setSystemInfo('kernelVersion', si.kernelVersion);
+    setSystemInfo('uptime', si.uptime);
+    setSystemInfo('deviceModel', si.deviceModel);
+    setSystemInfo('androidVersion', si.androidVersion);
+    setSystemInfo('selinuxStatus', si.selinuxStatus);
+
+    const cfg = data.config;
+    if (cfg.brene) {
+      const brene: Partial<BreneSettings> = {};
+      for (const key of Object.keys(cfg.brene) as (keyof BreneSettings)[]) {
+        if (key in cfg.brene) {
+          const v = cfg.brene[key];
+          brene[key] = typeof v === 'boolean' ? v : String(v) === 'true';
+        }
+      }
+      setSettings('brene', prev => ({ ...prev, ...brene }));
+    }
+    if (cfg.susfs) {
+      const susfs: Partial<SusfsSettings> = {};
+      for (const key of Object.keys(cfg.susfs) as (keyof SusfsSettings)[]) {
+        if (key in cfg.susfs) {
+          const v = (cfg.susfs as any)[key];
+          susfs[key] = typeof v === 'boolean' ? v : String(v) === 'true';
+        }
+      }
+      setSettings('susfs', prev => ({ ...prev, ...susfs }));
+    }
+    if (cfg.uname) {
+      setSettings('uname', prev => ({
+        ...prev,
+        mode: (cfg.uname.mode ?? prev.mode) as UnameMode,
+        release: cfg.uname.release ?? prev.release,
+        version: cfg.uname.version ?? prev.version,
+      }));
+    }
+    if (cfg.mount) {
+      setSettings('mount', prev => ({
+        ...prev,
+        storage_mode: (cfg.mount.storage_mode ?? prev.storage_mode) as StorageMode,
+        overlay_preferred: cfg.mount.overlay_preferred ?? prev.overlay_preferred,
+        magic_mount_fallback: cfg.mount.magic_mount_fallback ?? prev.magic_mount_fallback,
+        random_mount_paths: cfg.mount.random_mount_paths ?? prev.random_mount_paths,
+        mount_source: cfg.mount.mount_source ?? prev.mount_source,
+        overlay_source: cfg.mount.overlay_source ?? prev.overlay_source,
+      }));
+    }
+    if (cfg.perf) {
+      setSettings('perf', prev => ({
+        ...prev,
+        enabled: typeof cfg.perf.enabled === 'boolean' ? cfg.perf.enabled : prev.enabled,
+      }));
+    }
+    if (cfg.logging) {
+      setSettings({ verboseLogging: typeof cfg.logging.verbose === 'boolean' ? cfg.logging.verbose : settings.verboseLogging });
+    }
+
+    setRules(data.rules.map((r, i) => ({
+      id: r.id || String(i + 1),
+      name: r.name,
+      source: r.source,
+      target: r.target,
+      createdAt: new Date(),
+    })));
+
+    setExcludedUids(data.excluded_uids.map(u => ({
+      uid: u.uid,
+      packageName: u.packageName,
+      appName: u.appName,
+      excludedAt: u.excludedAt ? new Date(u.excludedAt) : new Date(),
+    })));
+
+    const validTypes = ['rule_added', 'rule_removed', 'uid_excluded', 'uid_included', 'engine_enabled', 'engine_disabled', 'setting_changed', 'mount_strategy_changed', 'susfs_toggle', 'brene_toggle', 'theme_changed'];
+    setActivity(prev => {
+      const runtimeItems = prev.filter(item => item.id.startsWith('rt-'));
+      const rtMessages = new Set(runtimeItems.map(item => item.message));
+      const freshItems: ActivityItem[] = data.activity
+        .filter(a => !rtMessages.has(a.message))
+        .map(a => ({
+          id: a.id,
+          type: (validTypes.includes(a.type) ? a.type : 'engine_enabled') as ActivityItem['type'],
+          message: a.message,
+          timestamp: new Date(a.timestamp),
+        }));
+      const merged = [...runtimeItems, ...freshItems];
+      merged.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      return merged.slice(0, 10);
+    });
+
+    setKsuModules(data.modules);
+  };
+
+  const loadInitialDataLegacy = async () => {
+    console.log('[ZM-Store] loadInitialDataLegacy() fallback');
+
+    const criticalResults = await Promise.allSettled([
+      api.getRuntimeStatus(),
+      api.getSystemInfoBatched(),
+      api.configDump(),
+      settings.autoAccentColor ? api.fetchSystemColor() : Promise.resolve(null),
+    ]);
+
+    const status = criticalResults[0].status === 'fulfilled' ? criticalResults[0].value : null;
+    const sysInfo = criticalResults[1].status === 'fulfilled' ? criticalResults[1].value : { driverVersion: '', kernelVersion: '', susfsVersion: '', uptime: '', deviceModel: '', androidVersion: '', selinuxStatus: '' };
+    const dump = criticalResults[2].status === 'fulfilled' ? criticalResults[2].value : null;
+    const systemColor = criticalResults[3].status === 'fulfilled' ? criticalResults[3].value : null;
+
+    if (status) {
+      setScenario(status.scenario as Scenario);
+      setCapabilities(status.capabilities);
+      setModuleStatuses(status.modules);
+      setFontModules(status.font_modules || []);
+      setDegraded(status.degraded);
+      setDegradationReason(status.degradation_reason);
+      setEngineActive(status.engine_active ?? false);
+      if (status.driver_version !== null) setSystemInfo('driverVersion', `v${status.driver_version}`);
+      if (status.susfs_version) setSystemInfo('susfsVersion', status.susfs_version);
+      setRootManager(status.root_manager);
+      setRuntimeStrategy(status.active_strategy ?? null);
+      _setMountSource(status.mount_source ?? null);
+      setResolvedStorageMode(status.resolved_storage_mode ?? null);
+      setStats({
+        activeRules: status.rule_count,
+        excludedUids: status.excluded_uid_count,
+        hiddenPaths: status.hidden_path_count,
+      });
+    }
+    setSystemInfo('kernelVersion', sysInfo.kernelVersion);
+    setSystemInfo('uptime', sysInfo.uptime);
+    setSystemInfo('deviceModel', sysInfo.deviceModel);
+    setSystemInfo('androidVersion', sysInfo.androidVersion);
+    setSystemInfo('selinuxStatus', sysInfo.selinuxStatus);
+    if (!status) {
+      setSystemInfo('driverVersion', sysInfo.driverVersion);
+      setSystemInfo('susfsVersion', sysInfo.susfsVersion);
+    }
+    if (systemColor) setSettings({ accentColor: systemColor });
+    setLoading('status', false);
+
+    const configLoads = Promise.allSettled([
+      loadBreneSettings(dump),
+      loadSusfsSettings(dump),
+      loadPerfSettings(dump),
+      loadMountSettings(dump),
+      loadVerboseState(dump),
+    ]);
+
+    const deferredResults = await Promise.allSettled([
+      api.getRules(),
+      api.getExcludedUids(),
+      api.getActivity(),
+      api.scanKsuModules(),
+    ]);
+
+    const rulesData = deferredResults[0].status === 'fulfilled' ? deferredResults[0].value : [];
+    const uidsData = deferredResults[1].status === 'fulfilled' ? deferredResults[1].value : [];
+    const activityData = deferredResults[2].status === 'fulfilled' ? deferredResults[2].value : [];
+    const ksuModulesData = deferredResults[3].status === 'fulfilled' ? deferredResults[3].value : [];
+
+    setRules(rulesData);
+    setExcludedUids(uidsData);
+    setActivity(prev => {
+      const runtimeItems = prev.filter(item => item.id.startsWith('rt-'));
+      const rtMessages = new Set(runtimeItems.map(item => item.message));
+      const deduped = activityData.filter(item => !rtMessages.has(item.message));
+      const merged = [...runtimeItems, ...deduped];
+      merged.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      return merged.slice(0, 10);
+    });
+    if (!status) {
+      setStats({
+        activeRules: rulesData.length,
+        excludedUids: uidsData.length,
+      });
+    }
+    setKsuModules(ksuModulesData);
+
+    await configLoads;
+  };
+
   const loadInitialData = async () => {
     console.log('[ZM-Store] loadInitialData() starting...');
     setLoading({ status: true, rules: true, activity: true, modules: true });
 
+    hydrateFromCache();
+
     try {
-      // Phase A (critical path): status + sysInfo + config dump + accent color
-      // These populate the StatusTab and settings — render ASAP
-      const criticalResults = await Promise.allSettled([
-        api.getRuntimeStatus(),
-        api.getSystemInfoBatched(),
-        api.configDump(),
+      const [batchedData, systemColor] = await Promise.all([
+        api.webuiInit(),
         settings.autoAccentColor ? api.fetchSystemColor() : Promise.resolve(null),
       ]);
 
-      const status = criticalResults[0].status === 'fulfilled' ? criticalResults[0].value : null;
-      const sysInfo = criticalResults[1].status === 'fulfilled' ? criticalResults[1].value : { driverVersion: '', kernelVersion: '', susfsVersion: '', uptime: '', deviceModel: '', androidVersion: '', selinuxStatus: '' };
-      const dump = criticalResults[2].status === 'fulfilled' ? criticalResults[2].value : null;
-      const systemColor = criticalResults[3].status === 'fulfilled' ? criticalResults[3].value : null;
-
-      // Apply critical data immediately so StatusTab exits skeleton state
-      if (status) {
-        setScenario(status.scenario as Scenario);
-        setCapabilities(status.capabilities);
-        setModuleStatuses(status.modules);
-        setFontModules(status.font_modules || []);
-        setDegraded(status.degraded);
-        setDegradationReason(status.degradation_reason);
-        setEngineActive(status.engine_active ?? false);
-        if (status.driver_version !== null) setSystemInfo('driverVersion', `v${status.driver_version}`);
-        if (status.susfs_version) setSystemInfo('susfsVersion', status.susfs_version);
-        setRootManager(status.root_manager);
-        setRuntimeStrategy(status.active_strategy ?? null);
-        _setMountSource(status.mount_source ?? null);
-        setResolvedStorageMode(status.resolved_storage_mode ?? null);
-        setStats({
-          activeRules: status.rule_count,
-          excludedUids: status.excluded_uid_count,
-          hiddenPaths: status.hidden_path_count,
-        });
-      }
-      setSystemInfo('kernelVersion', sysInfo.kernelVersion);
-      setSystemInfo('uptime', sysInfo.uptime);
-      setSystemInfo('deviceModel', sysInfo.deviceModel);
-      setSystemInfo('androidVersion', sysInfo.androidVersion);
-      setSystemInfo('selinuxStatus', sysInfo.selinuxStatus);
-      if (!status) {
-        setSystemInfo('driverVersion', sysInfo.driverVersion);
-        setSystemInfo('susfsVersion', sysInfo.susfsVersion);
-      }
       if (systemColor) setSettings({ accentColor: systemColor });
-      setLoading('status', false);
 
-      // Config-dependent loads (essentially free when dump exists — just parses the dump object)
-      const configLoads = Promise.allSettled([
-        loadBreneSettings(dump),
-        loadSusfsSettings(dump),
-        loadPerfSettings(dump),
-        loadMountSettings(dump),
-        loadVerboseState(dump),
-      ]);
-
-      // Phase B (deferred): rules, UIDs, activity, modules — needed for secondary tabs
-      const deferredResults = await Promise.allSettled([
-        api.getRules(),
-        api.getExcludedUids(),
-        api.getActivity(),
-        api.scanKsuModules(),
-      ]);
-
-      const rulesData = deferredResults[0].status === 'fulfilled' ? deferredResults[0].value : [];
-      const uidsData = deferredResults[1].status === 'fulfilled' ? deferredResults[1].value : [];
-      const activityData = deferredResults[2].status === 'fulfilled' ? deferredResults[2].value : [];
-      const ksuModulesData = deferredResults[3].status === 'fulfilled' ? deferredResults[3].value : [];
-
-      // Apply deferred data
-      setRules(rulesData);
-      setExcludedUids(uidsData);
-      setActivity(prev => {
-        const runtimeItems = prev.filter(item => item.id.startsWith('rt-'));
-        const rtMessages = new Set(runtimeItems.map(item => item.message));
-        const deduped = activityData.filter(item => !rtMessages.has(item.message));
-        const merged = [...runtimeItems, ...deduped];
-        merged.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-        return merged.slice(0, 10);
-      });
-      if (!status) {
-        setStats({
-          activeRules: rulesData.length,
-          excludedUids: uidsData.length,
-        });
-      }
-      setKsuModules(ksuModulesData);
-
-      // Wait for config loads to finish (usually already done by now)
-      await configLoads;
-
-      // Surface first rejected read so UI can show degraded state
-      const allResults = [...criticalResults, ...deferredResults];
-      const labels = ['status', 'sysInfo', 'configDump', 'color', 'rules', 'uids', 'activity', 'modules'];
-      const firstFail = allResults.findIndex(r => r.status === 'rejected');
-      if (firstFail !== -1) {
-        setLastApiError({ operation: `loadInitialData:${labels[firstFail]}`, error: (allResults[firstFail] as PromiseRejectedResult).reason, timestamp: new Date() });
+      if (batchedData) {
+        applyBatchedResponse(batchedData);
       } else {
-        setLastApiError(null);
+        await loadInitialDataLegacy();
       }
 
+      writeCache(buildCacheState());
+      setLastApiError(null);
       console.log('[ZM-Store] loadInitialData() complete');
     } catch (err) {
       console.error('[ZM-Store] loadInitialData() error:', err);

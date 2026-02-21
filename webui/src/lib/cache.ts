@@ -1,0 +1,123 @@
+import type {
+  Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo,
+  KsuModule, CapabilityFlags, ModuleStatus, MountStrategy,
+  BreneSettings, SusfsSettings, UnameSettings, MountSettings,
+} from './types';
+
+const CACHE_KEY = 'zm-state-cache';
+const CACHE_VERSION = 1;
+
+export interface HydratableState {
+  scenario: Scenario;
+  engineActive: boolean;
+  capabilities: CapabilityFlags | null;
+  stats: EngineStats;
+  systemInfo: SystemInfo;
+  moduleStatuses: ModuleStatus[];
+  fontModules: string[];
+  degraded: boolean;
+  degradationReason: string | null;
+  rootManager: string | null;
+  runtimeStrategy: MountStrategy | null;
+  mountSource: string | null;
+  resolvedStorageMode: string | null;
+  rules: VfsRule[];
+  excludedUids: ExcludedUid[];
+  activity: ActivityItem[];
+  ksuModules: KsuModule[];
+  brene: BreneSettings;
+  susfs: SusfsSettings;
+  uname: UnameSettings;
+  mount: MountSettings;
+  verboseLogging: boolean;
+}
+
+interface SerializedState extends Omit<HydratableState, 'rules' | 'excludedUids' | 'activity'> {
+  _v: number;
+  _ts: number;
+  rules: Array<Omit<VfsRule, 'createdAt'> & { createdAt: string }>;
+  excludedUids: Array<Omit<ExcludedUid, 'excludedAt'> & { excludedAt: string }>;
+  activity: Array<Omit<ActivityItem, 'timestamp'> & { timestamp: string }>;
+}
+
+export function writeCache(state: HydratableState): void {
+  try {
+    const serialized: SerializedState = {
+      _v: CACHE_VERSION,
+      _ts: Date.now(),
+      scenario: state.scenario,
+      engineActive: state.engineActive,
+      capabilities: state.capabilities,
+      stats: state.stats,
+      systemInfo: state.systemInfo,
+      moduleStatuses: state.moduleStatuses,
+      fontModules: state.fontModules,
+      degraded: state.degraded,
+      degradationReason: state.degradationReason,
+      rootManager: state.rootManager,
+      runtimeStrategy: state.runtimeStrategy,
+      mountSource: state.mountSource,
+      resolvedStorageMode: state.resolvedStorageMode,
+      rules: state.rules.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })),
+      excludedUids: state.excludedUids.map(u => ({ ...u, excludedAt: u.excludedAt.toISOString() })),
+      activity: state.activity.map(a => ({ ...a, timestamp: a.timestamp.toISOString() })),
+      ksuModules: state.ksuModules,
+      brene: state.brene,
+      susfs: state.susfs,
+      uname: state.uname,
+      mount: state.mount,
+      verboseLogging: state.verboseLogging,
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(serialized));
+    console.log('[ZM-Cache] wrote cache at', new Date(serialized._ts).toISOString());
+  } catch (e) {
+    console.warn('[ZM-Cache] writeCache failed:', e);
+  }
+}
+
+export function readCache(): HydratableState | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+
+    const cached: SerializedState = JSON.parse(raw);
+    if (cached._v !== CACHE_VERSION) {
+      localStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+
+    console.log('[ZM-Cache] hydrating from cache written at', new Date(cached._ts).toISOString());
+    return {
+      scenario: cached.scenario,
+      engineActive: cached.engineActive,
+      capabilities: cached.capabilities,
+      stats: cached.stats,
+      systemInfo: cached.systemInfo,
+      moduleStatuses: cached.moduleStatuses,
+      fontModules: cached.fontModules,
+      degraded: cached.degraded,
+      degradationReason: cached.degradationReason,
+      rootManager: cached.rootManager,
+      runtimeStrategy: cached.runtimeStrategy,
+      mountSource: cached.mountSource,
+      resolvedStorageMode: cached.resolvedStorageMode,
+      rules: cached.rules.map(r => ({ ...r, createdAt: new Date(r.createdAt) })),
+      excludedUids: cached.excludedUids.map(u => ({ ...u, excludedAt: new Date(u.excludedAt) })),
+      activity: cached.activity.map(a => ({ ...a, timestamp: new Date(a.timestamp) })),
+      ksuModules: cached.ksuModules,
+      brene: cached.brene,
+      susfs: cached.susfs,
+      uname: cached.uname,
+      mount: cached.mount,
+      verboseLogging: cached.verboseLogging,
+    };
+  } catch (e) {
+    console.warn('[ZM-Cache] readCache failed:', e);
+    localStorage.removeItem(CACHE_KEY);
+    return null;
+  }
+}
+
+export function clearCache(): void {
+  localStorage.removeItem(CACHE_KEY);
+}

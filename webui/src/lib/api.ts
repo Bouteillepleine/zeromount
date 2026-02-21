@@ -1,4 +1,4 @@
-import type { VfsRule, ExcludedUid, SystemInfo, ActivityItem, EngineStats, InstalledApp, KsuModule, RuntimeStatus } from './types';
+import type { VfsRule, ExcludedUid, SystemInfo, ActivityItem, EngineStats, InstalledApp, KsuModule, RuntimeStatus, WebUiInitResponse } from './types';
 import { ksuExec } from './ksuApi';
 import { PATHS, APP_VERSION } from './constants';
 // Lazy-load mock module only in dev. The import() is behind import.meta.env.DEV
@@ -764,6 +764,23 @@ echo "]"
       if (errno === 0 && stdout.trim()) return stdout.trim();
     } catch (e) {
       console.error('[ZM-API] readSusfsConfigVar() error:', e);
+    }
+    return null;
+  },
+
+  async webuiInit(): Promise<WebUiInitResponse | null> {
+    console.log('[ZM-API] webuiInit() called');
+    if (shouldUseMock()) return null;
+    try {
+      const { errno, stdout } = await ksuExec(`${PATHS.BINARY} webui-init`, 10000);
+      if (errno === 0 && stdout.trim()) {
+        const parsed = JSON.parse(stdout.trim()) as WebUiInitResponse;
+        console.log('[ZM-API] webuiInit() success');
+        return parsed;
+      }
+      console.log('[ZM-API] webuiInit() command failed, errno:', errno);
+    } catch (e) {
+      console.error('[ZM-API] webuiInit() error:', e);
     }
     return null;
   },
