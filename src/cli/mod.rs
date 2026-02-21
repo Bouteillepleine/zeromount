@@ -69,6 +69,7 @@ pub enum Commands {
     /// Remove stale overlay mounts from previous runs
     CleanupStale,
     /// Batched WebUI init data (single JSON blob)
+    #[command(name = "webui-init")]
     WebUiInit,
     /// Print version
     Version,
