@@ -67,6 +67,14 @@ if [ ! -f "$ZM_DATA/config.toml" ]; then
     FRESH_INSTALL=true
 fi
 
+# Upgrade detection (PIF-style): old module dir exists → preserve settings,
+# clean stale state, and restore SELinux contexts on peer modules.
+IS_UPGRADE=false
+OLD_MODULE="/data/adb/modules/meta-zeromount"
+if [ -d "$OLD_MODULE" ] && [ "$FRESH_INSTALL" = false ]; then
+    IS_UPGRADE=true
+fi
+
 mkdir -p "$ZM_DATA"
 mkdir -p "$ZM_DATA/logs"
 zm_print "  ✅ Data directory ready"
@@ -76,6 +84,20 @@ if [ "$FRESH_INSTALL" = true ]; then
     "$BIN" config defaults > "$ZM_DATA/config.toml" 2>/dev/null || true
 else
     zm_print "  ✅ Existing config preserved"
+fi
+
+if [ "$IS_UPGRADE" = true ]; then
+    # Purge staged fonts so next boot regenerates them with correct SELinux context
+    rm -rf "$ZM_DATA/fonts" 2>/dev/null
+    # Restore system_file on peer modules' system/ dirs — KSU sets this during
+    # their install, but it can be lost between reboots on some firmware
+    if command -v chcon >/dev/null 2>&1; then
+        for mod_dir in /data/adb/modules/*/system; do
+            case "$mod_dir" in */meta-zeromount/system) continue ;; esac
+            [ -d "$mod_dir" ] && chcon -R u:object_r:system_file:s0 "$mod_dir" 2>/dev/null
+        done
+    fi
+    zm_print "  ✅ Upgrade: peer module contexts restored"
 fi
 
 # Xiaomi/Redmi/POCO devices have mi_ext overlay mounts that trigger detection

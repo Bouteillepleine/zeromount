@@ -343,6 +343,11 @@ fn process_font_modules(client: &SusfsClient, overlay_source: &str) -> Vec<FontM
             None => continue,
         };
 
+        // KSU restorecon resets font module contexts to adb_data_file on
+        // metamodule upgrade. Force system_file so bind mounts are readable
+        // by system_server/zygote regardless of who creates them.
+        fix_font_selinux_contexts(&font_dir);
+
         let bind_count = bind_mount_font_files(&font_dir, SYSTEM_FONTS_DIR);
         if bind_count > 0 {
             info!("font module '{module_id}': {bind_count} files bind-mounted");
@@ -398,8 +403,8 @@ fn bind_mount_font_files(font_dir: &Path, system_font_dir: &str) -> u32 {
 
         if !Path::new(&target).exists() {
             if let Some(staged) = stage_font_file(&source, filename) {
-                crate::utils::selinux::copy_selinux_context(
-                    Path::new(SYSTEM_FONTS_DIR), &staged
+                crate::utils::selinux::set_selinux_context(
+                    &staged, "u:object_r:system_file:s0"
                 );
                 if let Ok(driver) = crate::vfs::VfsDriver::open() {
                     match driver.add_rule(&staged, Path::new(&target), false) {
@@ -411,7 +416,10 @@ fn bind_mount_font_files(font_dir: &Path, system_font_dir: &str) -> u32 {
             continue;
         }
 
-        crate::utils::selinux::copy_selinux_context(Path::new(&target), &source);
+        // Force system_file context so system_server/zygote can read fonts.
+        // copy_selinux_context can fail silently if the target is already overlaid;
+        // explicit set_selinux_context is more reliable across upgrade reboots.
+        crate::utils::selinux::set_selinux_context(&source, "u:object_r:system_file:s0");
 
         let c_src = match std::ffi::CString::new(source.as_os_str().as_encoded_bytes()) {
             Ok(s) => s,
@@ -440,6 +448,50 @@ fn bind_mount_font_files(font_dir: &Path, system_font_dir: &str) -> u32 {
         }
     }
     count
+}
+
+fn fix_font_selinux_contexts(font_dir: &Path) {
+    let entries = match fs::read_dir(font_dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    let context = b"u:object_r:system_file:s0\0";
+    let attr = b"security.selinux\0";
+    let mut fixed = 0u32;
+
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let c_path = match std::ffi::CString::new(path.as_os_str().as_encoded_bytes()) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        let ret = unsafe {
+            libc::setxattr(
+                c_path.as_ptr(),
+                attr.as_ptr() as *const libc::c_char,
+                context.as_ptr() as *const libc::c_void,
+                context.len() - 1,
+                0,
+            )
+        };
+
+        if ret == 0 {
+            fixed += 1;
+        } else {
+            let err = std::io::Error::last_os_error();
+            warn!("setxattr system_file failed for {}: {err}", path.display());
+        }
+    }
+
+    if fixed > 0 {
+        info!("fixed SELinux context on {fixed} font files");
+    }
 }
 
 /// Overlay-mode font hiding: kstat + path_hide only, no open_redirect.
@@ -494,8 +546,10 @@ fn hide_font_modules_overlay(client: &SusfsClient) -> Vec<FontModuleInfo> {
             let target = format!("{}/{}", SYSTEM_FONTS_DIR, filename);
             let replacement = path.to_string_lossy().to_string();
 
-            crate::utils::selinux::copy_selinux_context(
-                Path::new(&target), Path::new(&replacement)
+            // KSU sets system_file during install, but upgrade reboots can lose it.
+            // Explicit set (not copy from overlay — that's circular when context is wrong).
+            crate::utils::selinux::set_selinux_context(
+                Path::new(&replacement), "u:object_r:system_file:s0"
             );
 
             if client.features().kstat {
@@ -524,8 +578,8 @@ fn hide_font_modules_overlay(client: &SusfsClient) -> Vec<FontModuleInfo> {
 
             if let Some(ref driver) = vfs_driver {
                 if let Some(staged) = stage_font_file(&path, filename) {
-                    crate::utils::selinux::copy_selinux_context(
-                        Path::new(&target), &staged
+                    crate::utils::selinux::set_selinux_context(
+                        &staged, "u:object_r:system_file:s0"
                     );
                     match driver.add_rule(&staged, Path::new(&target), false) {
                         Ok(()) => debug!("overlay font VFS rule: {filename} (staged)"),
