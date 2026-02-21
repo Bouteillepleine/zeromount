@@ -10,7 +10,7 @@ import { store } from '../lib/store';
 import { GITHUB_URL, PATHS } from '../lib/constants';
 import { ksuExec } from '../lib/ksuApi';
 import { escapeShellArg } from '../lib/api';
-import type { BreneSettings, SusfsSettings, UnameMode, MountStrategy, StorageMode } from '../lib/types';
+import type { BreneSettings, SusfsSettings, UnameMode, MountStrategy, StorageMode, Settings } from '../lib/types';
 import "./SettingsTab.css";
 
 const accentColors = [
@@ -763,11 +763,27 @@ export function SettingsTab() {
               variant="secondary"
               size="small"
               onClick={async () => {
-                const outPath = '/sdcard/zeromount-config.toml';
                 try {
-                  const { errno } = await ksuExec(`cp /data/adb/zeromount/config.toml ${outPath}`);
-                  if (errno === 0) {
-                    store.showToast(`Config exported to ${outPath}`, 'success');
+                  const { errno, stdout } = await ksuExec('cat /data/adb/zeromount/config.toml');
+                  if (errno !== 0 || !stdout) {
+                    store.showToast('Failed to read config', 'error');
+                    return;
+                  }
+                  const backup = JSON.stringify({
+                    version: 1,
+                    backend: stdout,
+                    webui: {
+                      theme: localStorage.getItem('zeromount-theme'),
+                      accentColor: localStorage.getItem('zeromount-accent'),
+                      autoAccentColor: localStorage.getItem('zeromount-autoAccent'),
+                      fixedNav: localStorage.getItem('zeromount-fixedNav'),
+                      bgOpacity: localStorage.getItem('zeromount-bgOpacity'),
+                    },
+                  }, null, 2);
+                  const escaped = backup.replace(/'/g, "'\\''");
+                  const { errno: writeErr } = await ksuExec(`printf '%s' '${escaped}' > /sdcard/Download/zeromount-backup.json`);
+                  if (writeErr === 0) {
+                    store.showToast('Config exported to Downloads', 'success');
                   } else {
                     store.showToast('Failed to export config', 'error');
                   }
@@ -781,24 +797,69 @@ export function SettingsTab() {
             <Button
               variant="secondary"
               size="small"
-              onClick={async () => {
-                const srcPath = '/sdcard/zeromount-config.toml';
-                try {
-                  const { errno: checkErr } = await ksuExec(`test -f ${srcPath}`);
-                  if (checkErr !== 0) {
-                    store.showToast(`No config found at ${srcPath}`, 'error');
-                    return;
-                  }
-                  const { errno } = await ksuExec(`cp ${srcPath} /data/adb/zeromount/config.toml`);
-                  if (errno !== 0) {
+              onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '*/*';
+                input.onchange = async () => {
+                  const file = input.files?.[0];
+                  if (!file) return;
+                  try {
+                    const content = await file.text();
+                    if (!content.trim()) {
+                      store.showToast('Selected file is empty', 'error');
+                      return;
+                    }
+
+                    let backendConfig = content;
+                    let webuiSettings: Record<string, string | null> | null = null;
+
+                    try {
+                      const parsed = JSON.parse(content);
+                      if (parsed.version && parsed.backend) {
+                        backendConfig = parsed.backend;
+                        webuiSettings = parsed.webui || null;
+                      }
+                    } catch {
+                      // Not JSON — treat as raw TOML config
+                    }
+
+                    const escaped = backendConfig.replace(/'/g, "'\\''");
+                    const { errno } = await ksuExec(`printf '%s' '${escaped}' > /data/adb/zeromount/config.toml`);
+                    if (errno !== 0) {
+                      store.showToast('Failed to write config', 'error');
+                      return;
+                    }
+
+                    if (webuiSettings) {
+                      const keyMap: Record<string, string> = {
+                        theme: 'zeromount-theme',
+                        accentColor: 'zeromount-accent',
+                        autoAccentColor: 'zeromount-autoAccent',
+                        fixedNav: 'zeromount-fixedNav',
+                        bgOpacity: 'zeromount-bgOpacity',
+                      };
+                      for (const [key, storageKey] of Object.entries(keyMap)) {
+                        const val = webuiSettings[key];
+                        if (val != null) localStorage.setItem(storageKey, val);
+                      }
+
+                      const uiUpdates: Partial<Settings> = {};
+                      if (webuiSettings.theme) uiUpdates.theme = webuiSettings.theme as Settings['theme'];
+                      if (webuiSettings.accentColor) uiUpdates.accentColor = webuiSettings.accentColor;
+                      if (webuiSettings.autoAccentColor != null) uiUpdates.autoAccentColor = webuiSettings.autoAccentColor === 'true';
+                      if (webuiSettings.fixedNav != null) uiUpdates.fixedNav = webuiSettings.fixedNav === 'true';
+                      if (Object.keys(uiUpdates).length) store.updateSettings(uiUpdates);
+                      if (webuiSettings.bgOpacity != null) store.setBgOpacity(parseFloat(webuiSettings.bgOpacity));
+                    }
+
+                    await store.loadInitialData();
+                    store.showToast(`Imported ${file.name} — reload complete`, 'success');
+                  } catch {
                     store.showToast('Failed to import config', 'error');
-                    return;
                   }
-                  await store.loadInitialData();
-                  store.showToast('Config imported — reload complete', 'success');
-                } catch {
-                  store.showToast('Failed to import config', 'error');
-                }
+                };
+                input.click();
               }}
             >
               Import Config
