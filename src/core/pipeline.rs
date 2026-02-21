@@ -390,15 +390,19 @@ impl MountController<Mounted> {
         // 1. SUSFS protections (BRENE)
         let (hidden_paths, font_infos) = self.apply_susfs_protections();
 
-        // 2. Update module description with status summary
+        // 2. Stock overlay hiding (SUSFS-gated)
+        let stock_overlay_count = self.hide_stock_overlays();
+
+        // 3. Update module description with status summary
         let summary = self.build_description_summary(&font_infos);
         if let Err(e) = self.state.root_mgr.update_description(&summary) {
             debug!("update_description failed (non-fatal): {e}");
         }
 
-        // 3. Build RuntimeState and persist atomically (ME07: write tmp then rename)
+        // 4. Build RuntimeState and persist atomically (ME07: write tmp then rename)
         let mut runtime_state = self.build_runtime_state(&font_infos);
         runtime_state.hidden_path_count = hidden_paths;
+        runtime_state.stock_overlay_count = stock_overlay_count;
         write_status_json_atomic(&runtime_state);
 
         // KSU09: notify-module-mounted is fired by metamount.sh after the binary
@@ -453,6 +457,35 @@ impl MountController<Mounted> {
                 (0, Vec::new())
             }
         }
+    }
+
+    // Collect stock OEM overlays for runtime state reporting.
+    // Actual hiding requires kernel-side SUSFS extension (pending).
+    fn hide_stock_overlays(&self) -> u32 {
+        if !self.state.config.mount.hide_stock_overlays {
+            debug!("stock overlay hiding disabled in config");
+            return 0;
+        }
+        if !self.state.detection.capabilities.susfs_available {
+            info!("stock overlay hiding skipped: SUSFS not available");
+            return 0;
+        }
+
+        let overlays = crate::mount::stock_overlays::collect_stock_overlays();
+        if overlays.is_empty() {
+            info!("no stock OEM overlays found on this device");
+            return 0;
+        }
+
+        let count = overlays.len() as u32;
+        for overlay in &overlays {
+            debug!(path = %overlay.mount_point, "stock OEM overlay detected");
+        }
+        info!(
+            count = count,
+            "stock OEM overlays collected (kernel-side hiding pending)"
+        );
+        count
     }
 
     fn build_description_summary(&self, font_infos: &[crate::susfs::brene::FontModuleInfo]) -> String {
@@ -622,7 +655,7 @@ fn cleanup_previous_mounts() {
         match module.strategy {
             MountStrategy::Overlay | MountStrategy::MagicMount => {
                 for path in &module.mount_paths {
-                    detach_mount(path);
+                    try_detach_mount(path);
                 }
             }
             MountStrategy::Vfs | MountStrategy::Font => {}
@@ -632,19 +665,20 @@ fn cleanup_previous_mounts() {
     info!(modules = prev_state.modules.len(), "previous mounts cleaned up");
 }
 
-fn detach_mount(path: &str) {
+fn try_detach_mount(path: &str) -> bool {
     let c_path = match std::ffi::CString::new(path.as_bytes()) {
         Ok(p) => p,
-        Err(_) => return,
+        Err(_) => return false,
     };
-    // SAFETY: CString is non-null NUL-terminated; MNT_DETACH is a valid umount2 flag.
     let ret = unsafe { libc::umount2(c_path.as_ptr(), libc::MNT_DETACH) };
-    if ret != 0 {
-        let errno = std::io::Error::last_os_error();
-        if errno.raw_os_error() != Some(libc::EINVAL) {
-            debug!(path = %path, error = %errno, "umount failed (may already be gone)");
-        }
+    if ret == 0 {
+        return true;
     }
+    let errno = std::io::Error::last_os_error();
+    if errno.raw_os_error() != Some(libc::EINVAL) {
+        debug!(path = %path, error = %errno, "umount failed (may already be gone)");
+    }
+    false
 }
 
 // Only detach font mounts that WE created (overlay/tmpfs).
@@ -689,11 +723,11 @@ fn cleanup_font_mounts() {
     }
 
     for path in our_font_mounts.iter().rev() {
-        detach_mount(path);
+        try_detach_mount(path);
     }
 
     if has_our_overlay {
-        detach_mount("/system/fonts");
+        try_detach_mount("/system/fonts");
         debug!("cleaned up stale font overlay on /system/fonts");
     }
 
@@ -780,7 +814,15 @@ pub fn run_pipeline_with_bootloop_guard(mut config: ZeroMountConfig) -> Result<R
         warn!("SUSFS config import failed: {e}");
     }
 
-    run_full_pipeline(config)
+    let state = run_full_pipeline(config)?;
+
+    // Pipeline succeeded — clear bootcount so a normal reboot won't
+    // false-trigger the shell guard (which bails at count > 0).
+    ZeroMountConfig::reset_bootcount().unwrap_or_else(|e| {
+        warn!("bootcount reset failed (non-fatal): {e}");
+    });
+
+    Ok(state)
 }
 
 #[cfg(test)]
