@@ -118,13 +118,35 @@ if [ "$SUSFS_DETECTED" = true ]; then
     mkdir -p "$SUSFS_DIR"
     if [ -f "$SUSFS_CONFIG" ]; then
         zm_print "  🔧 Syncing SUSFS config"
+        # Security-critical: force correct values on upgrade
+        if grep -q '^avc_log_spoofing=' "$SUSFS_CONFIG"; then
+            sed -i 's/^avc_log_spoofing=.*/avc_log_spoofing=1/' "$SUSFS_CONFIG"
+        else
+            echo 'avc_log_spoofing=1' >> "$SUSFS_CONFIG"
+        fi
+        if grep -q '^hide_sus_mnts_for_all_or_non_su_procs=' "$SUSFS_CONFIG"; then
+            sed -i 's/^hide_sus_mnts_for_all_or_non_su_procs=.*/hide_sus_mnts_for_all_or_non_su_procs=1/' "$SUSFS_CONFIG"
+        else
+            echo 'hide_sus_mnts_for_all_or_non_su_procs=1' >> "$SUSFS_CONFIG"
+        fi
+        if grep -q '^emulate_vold_app_data=' "$SUSFS_CONFIG"; then
+            sed -i 's/^emulate_vold_app_data=.*/emulate_vold_app_data=1/' "$SUSFS_CONFIG"
+        else
+            echo 'emulate_vold_app_data=1' >> "$SUSFS_CONFIG"
+        fi
+        if grep -q '^force_hide_lsposed=' "$SUSFS_CONFIG"; then
+            sed -i 's/^force_hide_lsposed=.*/force_hide_lsposed=1/' "$SUSFS_CONFIG"
+        else
+            echo 'force_hide_lsposed=1' >> "$SUSFS_CONFIG"
+        fi
+        if grep -q '^hide_loops=' "$SUSFS_CONFIG"; then
+            sed -i 's/^hide_loops=.*/hide_loops=1/' "$SUSFS_CONFIG"
+        else
+            echo 'hide_loops=1' >> "$SUSFS_CONFIG"
+        fi
+        # User preference: only seed if missing
         grep -q '^susfs_log=' "$SUSFS_CONFIG" || echo 'susfs_log=0' >> "$SUSFS_CONFIG"
-        grep -q '^avc_log_spoofing=' "$SUSFS_CONFIG" || echo 'avc_log_spoofing=1' >> "$SUSFS_CONFIG"
-        grep -q '^hide_sus_mnts_for_all_or_non_su_procs=' "$SUSFS_CONFIG" || echo 'hide_sus_mnts_for_all_or_non_su_procs=1' >> "$SUSFS_CONFIG"
-        grep -q '^emulate_vold_app_data=' "$SUSFS_CONFIG" || echo 'emulate_vold_app_data=1' >> "$SUSFS_CONFIG"
-        grep -q '^force_hide_lsposed=' "$SUSFS_CONFIG" || echo 'force_hide_lsposed=1' >> "$SUSFS_CONFIG"
         grep -q '^spoof_cmdline=' "$SUSFS_CONFIG" || echo 'spoof_cmdline=0' >> "$SUSFS_CONFIG"
-        grep -q '^hide_loops=' "$SUSFS_CONFIG" || echo 'hide_loops=1' >> "$SUSFS_CONFIG"
         zm_print "  ✅ SUSFS config synced"
     else
         zm_print "  🔧 Seeding SUSFS config"
