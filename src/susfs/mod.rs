@@ -1,4 +1,5 @@
 pub mod brene;
+pub mod emoji;
 pub mod ffi;
 pub mod fonts;
 pub mod kstat;
@@ -23,6 +24,7 @@ pub struct SusfsFeatures {
     pub open_redirect: bool,
     pub kstat_redirect: bool,
     pub open_redirect_all: bool,
+    pub hide_mount: bool,
 }
 
 /// Client for SUSFS kernel operations via KSU supercall.
@@ -69,6 +71,10 @@ impl SusfsClient {
         );
         client.features.open_redirect_all = probe_command(
             SusfsCommand::AddOpenRedirectAll,
+            &baseline,
+        );
+        client.features.hide_mount = probe_command(
+            SusfsCommand::HideMount,
             &baseline,
         );
 
@@ -452,6 +458,24 @@ impl SusfsClient {
         check_err(info.err, "hide_sus_mounts")
     }
 
+    // ---- Per-mount hiding (custom 0x55563) ----
+
+    pub fn hide_mount(&self, mount_point: &str) -> Result<()> {
+        self.ensure_available()?;
+        if !self.features.hide_mount {
+            bail!("hide_mount not available on this kernel");
+        }
+
+        let mut info = StSusfsHideMount {
+            mount_point: [0u8; SUSFS_MAX_LEN_PATHNAME],
+            err: ERR_CMD_NOT_SUPPORTED,
+        };
+        copy_path_to_buf(&mut info.mount_point, mount_point);
+
+        self.do_supercall(SusfsCommand::HideMount, &mut info as *mut _ as *mut u8)?;
+        check_err(info.err, "hide_mount")
+    }
+
     // ---- AVC log spoofing ----
 
     pub fn enable_avc_log_spoofing(&self, enable: bool) -> Result<()> {
@@ -618,6 +642,7 @@ fn parse_features(features_str: &str) -> SusfsFeatures {
         open_redirect: features_str.contains("CONFIG_KSU_SUSFS_OPEN_REDIRECT"),
         kstat_redirect: false,
         open_redirect_all: false,
+        hide_mount: false,
     }
 }
 
@@ -677,6 +702,7 @@ fn probe_command(cmd: SusfsCommand, baseline: &ProbeBaseline) -> bool {
     match cmd {
         SusfsCommand::AddSusKstatRedirect => probe_kstat_redirect(baseline),
         SusfsCommand::AddOpenRedirectAll => probe_open_redirect_all(baseline),
+        SusfsCommand::HideMount => probe_hide_mount(baseline),
         _ => false,
     }
 }
@@ -738,6 +764,38 @@ fn probe_open_redirect_all(baseline: &ProbeBaseline) -> bool {
             debug!(
                 "probe open_redirect_all (0x555c1): ret={}, err={}, canary={:#X}, baseline={:?} → {}",
                 ret, info.err, info.target_ino, baseline,
+                if result { "SUPPORTED" } else { "NOT SUPPORTED" }
+            );
+            result
+        }
+    }
+}
+
+fn probe_hide_mount(baseline: &ProbeBaseline) -> bool {
+    let mut info = StSusfsHideMount {
+        mount_point: [0u8; SUSFS_MAX_LEN_PATHNAME],
+        err: PROBE_ERR_SENTINEL,
+    };
+    copy_path_to_buf(&mut info.mount_point, "/__zm_probe__");
+
+    // Embed canary in buffer tail — StSusfsHideMount has no u64 field,
+    // so StructZeroed baseline needs this to avoid false negatives
+    let canary_bytes = PROBE_CANARY.to_ne_bytes();
+    info.mount_point[248..256].copy_from_slice(&canary_bytes);
+
+    match supercall(SusfsCommand::HideMount, &mut info as *mut _ as *mut u8) {
+        Err(errno) => {
+            debug!("probe hide_mount (0x55563): syscall failed (errno {errno})");
+            false
+        }
+        Ok(ret) => {
+            let canary_back = u64::from_ne_bytes(
+                info.mount_point[248..256].try_into().unwrap(),
+            );
+            let result = interpret_probe_result(info.err, canary_back, baseline);
+            debug!(
+                "probe hide_mount (0x55563): ret={}, err={}, baseline={:?} -> {}",
+                ret, info.err, baseline,
                 if result { "SUPPORTED" } else { "NOT SUPPORTED" }
             );
             result
@@ -892,6 +950,7 @@ mod tests {
         assert!(!f.open_redirect);
         assert!(!f.kstat_redirect);
         assert!(!f.open_redirect_all);
+        assert!(!f.hide_mount);
     }
 
     // -- FFI helper tests --
@@ -949,6 +1008,7 @@ mod tests {
             open_redirect: true,
             kstat_redirect: false,
             open_redirect_all: false,
+            hide_mount: false,
         };
         // When kstat_redirect is false, the client's add_sus_kstat_redirect
         // method falls back to add_sus_kstat_statically
@@ -965,6 +1025,7 @@ mod tests {
             open_redirect: true,
             kstat_redirect: true,
             open_redirect_all: false,
+            hide_mount: false,
         };
         // When open_redirect_all is false, add_open_redirect_all falls back
         // to per-UID add_open_redirect
