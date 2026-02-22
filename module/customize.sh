@@ -87,8 +87,9 @@ else
 fi
 
 if [ "$IS_UPGRADE" = true ]; then
-    # Purge staged fonts so next boot regenerates them with correct SELinux context
+    # Purge staged fonts/emoji so next boot regenerates them with correct SELinux context
     rm -rf "$ZM_DATA/fonts" 2>/dev/null
+    rm -rf "$ZM_DATA/emoji" 2>/dev/null
     # Restore system_file on peer modules' system/ dirs — KSU sets this during
     # their install, but it can be lost between reboots on some firmware
     if command -v chcon >/dev/null 2>&1; then
@@ -98,6 +99,16 @@ if [ "$IS_UPGRADE" = true ]; then
         done
     fi
     zm_print "  ✅ Upgrade: peer module contexts restored"
+fi
+
+# Stage emoji font for runtime use
+EMOJI_DIR="$ZM_DATA/emoji"
+mkdir -p "$EMOJI_DIR"
+if [ -f "$MODPATH/emoji/NotoColorEmoji.ttf" ]; then
+    cp "$MODPATH/emoji/NotoColorEmoji.ttf" "$EMOJI_DIR/" 2>/dev/null
+    chmod 600 "$EMOJI_DIR/NotoColorEmoji.ttf" 2>/dev/null
+    chcon u:object_r:system_file:s0 "$EMOJI_DIR/NotoColorEmoji.ttf" 2>/dev/null
+    zm_print "  ✅ Emoji font staged"
 fi
 
 # Xiaomi/Redmi/POCO devices have mi_ext overlay mounts that trigger detection
@@ -213,6 +224,14 @@ if command -v chcon >/dev/null 2>&1; then
 fi
 
 rm -rf "$MODPATH/webroot/webroot" 2>/dev/null
+
+# Stage adbex libraries
+if [ -d "$MODPATH/lib/${ABI}" ]; then
+    chmod 644 "$MODPATH/lib/${ABI}"/*.so 2>/dev/null
+fi
+if [ -f "$MODPATH/bin/${ABI}/adbex_inject" ]; then
+    chmod 755 "$MODPATH/bin/${ABI}/adbex_inject"
+fi
 
 set_perm_recursive "$MODPATH/bin" 0 0 0755 0755
 chmod 755 "$MODPATH"/*.sh

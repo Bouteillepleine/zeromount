@@ -212,6 +212,8 @@ pub struct RuntimeState {
     pub resolved_storage_mode: Option<String>,
     #[serde(default)]
     pub stock_overlay_count: u32,
+    #[serde(default)]
+    pub emoji_applied: bool,
 }
 
 impl Default for RuntimeState {
@@ -235,6 +237,7 @@ impl Default for RuntimeState {
             root_manager: None,
             resolved_storage_mode: None,
             stock_overlay_count: 0,
+            emoji_applied: false,
         }
     }
 }
@@ -263,6 +266,7 @@ pub enum SusfsCommand {
     UpdateSusKstat = 0x55571,
     AddSusKstatStatically = 0x55572,
     AddSusKstatRedirect = 0x55573,
+    HideMount = 0x55563,
     SetUname = 0x55590,
     EnableLog = 0x555a0,
     SetCmdline = 0x555b0,

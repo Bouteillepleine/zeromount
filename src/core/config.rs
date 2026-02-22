@@ -26,6 +26,10 @@ pub struct ZeroMountConfig {
     #[serde(default)]
     pub perf: PerfConfig,
     #[serde(default)]
+    pub emoji: EmojiConfig,
+    #[serde(default)]
+    pub adb: AdbConfig,
+    #[serde(default)]
     pub per_module: HashMap<String, ModuleOverrides>,
 }
 
@@ -271,6 +275,39 @@ impl Default for PerfConfig {
     }
 }
 
+// -- Emoji --
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmojiConfig {
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+impl Default for EmojiConfig {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
+
+// -- ADB --
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdbConfig {
+    #[serde(default)]
+    pub hide_usb_debugging: bool,
+    #[serde(default)]
+    pub adb_root: bool,
+}
+
+impl Default for AdbConfig {
+    fn default() -> Self {
+        Self {
+            hide_usb_debugging: false,
+            adb_root: false,
+        }
+    }
+}
+
 // -- Per-module overrides --
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -302,6 +339,8 @@ impl Default for ZeroMountConfig {
             brene: BreneConfig::default(),
             uname: UnameConfig::default(),
             perf: PerfConfig::default(),
+            emoji: EmojiConfig::default(),
+            adb: AdbConfig::default(),
             per_module: HashMap::new(),
         }
     }
@@ -481,6 +520,13 @@ impl ZeroMountConfig {
             // perf.*
             "perf.enabled" => Some(self.perf.enabled.to_string()),
 
+            // emoji.*
+            "emoji.enabled" => Some(self.emoji.enabled.to_string()),
+
+            // adb.*
+            "adb.hide_usb_debugging" => Some(self.adb.hide_usb_debugging.to_string()),
+            "adb.adb_root" => Some(self.adb.adb_root.to_string()),
+
             // per_module.<id>.<field>
             k if k.starts_with("per_module.") => self.get_module_key(k),
 
@@ -541,6 +587,13 @@ impl ZeroMountConfig {
 
             // perf.*
             "perf.enabled" => self.perf.enabled = value.parse()?,
+
+            // emoji.*
+            "emoji.enabled" => self.emoji.enabled = value.parse()?,
+
+            // adb.*
+            "adb.hide_usb_debugging" => self.adb.hide_usb_debugging = value.parse()?,
+            "adb.adb_root" => self.adb.adb_root = value.parse()?,
 
             // per_module.<id>.<field>
             k if k.starts_with("per_module.") => self.set_module_key(k, value)?,
@@ -706,6 +759,9 @@ mod tests {
         assert!(config.brene.hide_ksu_loops);
         assert_eq!(config.uname.mode, UnameMode::Disabled);
         assert!(!config.perf.enabled);
+        assert!(!config.emoji.enabled);
+        assert!(!config.adb.hide_usb_debugging);
+        assert!(!config.adb.adb_root);
         assert!(config.per_module.is_empty());
     }
 
@@ -739,6 +795,12 @@ mod tests {
 
         config.set("uname.release", "5.10.0-gki").unwrap();
         assert_eq!(config.get("uname.release").unwrap(), "5.10.0-gki");
+
+        config.set("adb.hide_usb_debugging", "true").unwrap();
+        assert_eq!(config.get("adb.hide_usb_debugging").unwrap(), "true");
+
+        config.set("adb.adb_root", "true").unwrap();
+        assert_eq!(config.get("adb.adb_root").unwrap(), "true");
     }
 
     #[test]
@@ -852,6 +914,8 @@ kstat = false
         assert!(config.brene.auto_hide_apk);
         assert!(config.brene.auto_hide_rooted_folders);
         assert_eq!(config.uname.mode, UnameMode::Disabled);
+        assert!(!config.adb.hide_usb_debugging);
+        assert!(!config.adb.adb_root);
     }
 
     #[test]

@@ -21,6 +21,7 @@ pub struct WebUiInitResponse {
     pub excluded_uids: Vec<WebUiExcludedUid>,
     pub activity: Vec<WebUiActivityItem>,
     pub modules: Vec<WebUiModule>,
+    pub emoji_conflict: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -80,6 +81,8 @@ pub fn handle_webui_init() -> Result<()> {
     let activity = read_activity_log();
     let modules = build_module_list(&rules);
 
+    let emoji_conflict = status.font_modules.first().cloned();
+
     let response = WebUiInitResponse {
         status,
         config,
@@ -88,6 +91,7 @@ pub fn handle_webui_init() -> Result<()> {
         excluded_uids,
         activity,
         modules,
+        emoji_conflict,
     };
 
     let json = serde_json::to_string(&response)?;

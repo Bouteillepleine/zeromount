@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use tracing::{debug, warn};
@@ -311,10 +310,7 @@ pub fn handle_susfs(feature: &str, state: &str) -> Result<()> {
 
 pub fn handle_susfs_retry(wait: bool) -> Result<()> {
     if wait {
-        if !wait_for_sdcard(Duration::from_secs(120)) {
-            warn!("sdcard not available after 120s, skipping SUSFS retry");
-            return Ok(());
-        }
+        tracing::info!("--wait flag deprecated: sdcard wait now handled by boot-completed.sh");
     }
 
     let _lock = match crate::utils::lock::acquire_instance_lock()? {
@@ -349,7 +345,20 @@ pub fn handle_susfs_retry(wait: bool) -> Result<()> {
         }
     };
 
+    // Bisect gate: /data/adb/zeromount/.bisect controls which phases run
+    // "1" = ensure_root_paths only, "2" = +modules, "3" or absent = full
+    let bisect_phase: u8 = std::fs::read_to_string("/data/adb/zeromount/.bisect")
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(3);
+    tracing::info!("bisect phase: {bisect_phase}");
+
     client.ensure_root_paths();
+
+    if bisect_phase < 2 {
+        tracing::info!("bisect: stopping after ensure_root_paths");
+        return Ok(());
+    }
 
     // Only apply per-module protections for modules the boot pipeline mounted
     let status_path = Path::new("/data/adb/zeromount/.status.json");
@@ -357,8 +366,6 @@ pub fn handle_susfs_retry(wait: bool) -> Result<()> {
         .map(|s| s.modules.iter().map(|m| m.id.clone()).collect())
         .unwrap_or_default();
 
-    // Path hiding only — kstat already succeeded at boot.
-    // Skip kstat to avoid phantom file failures from VFS-redirected directories.
     let modules_dir = Path::new("/data/adb/modules");
     if modules_dir.exists() && !boot_module_ids.is_empty() {
         if let Ok(modules) = crate::modules::scanner::scan_modules(modules_dir) {
@@ -370,6 +377,11 @@ pub fn handle_susfs_retry(wait: bool) -> Result<()> {
                 }
             }
         }
+    }
+
+    if bisect_phase < 3 {
+        tracing::info!("bisect: stopping after module protections");
+        return Ok(());
     }
 
     let susfs_mode = crate::detect::load_detection()
@@ -421,128 +433,6 @@ pub fn handle_watch() -> Result<()> {
         crate::detect::watcher::touch_status_timestamp(&mut state);
         Ok(())
     })
-}
-
-// inotify constants (linux/inotify.h)
-const IN_CREATE: u32 = 0x0000_0100;
-const IN_MOVED_TO: u32 = 0x0000_0080;
-
-const SDCARD_TARGETS: &[&str] = &[
-    "/data/media/0/Android/data",
-    "/storage/emulated/0/Android/data",
-    "/sdcard/Android/data",
-];
-
-// Always exists early in boot — raw emulated storage before FUSE mount
-const SDCARD_WATCH_DIR: &str = "/data/media/0";
-
-fn sdcard_available() -> bool {
-    SDCARD_TARGETS.iter().any(|p| Path::new(p).exists())
-}
-
-/// Block until sdcard paths appear. Uses inotify on /data/media/0 for instant
-/// reaction to Android/ directory creation; falls back to 250ms polling.
-fn wait_for_sdcard(timeout: Duration) -> bool {
-    if sdcard_available() {
-        debug!("sdcard already available");
-        return true;
-    }
-
-    tracing::info!("waiting for sdcard decryption via inotify on {SDCARD_WATCH_DIR}");
-
-    let watch_dir = Path::new(SDCARD_WATCH_DIR);
-    if !watch_dir.exists() {
-        warn!("{SDCARD_WATCH_DIR} not present, falling back to polling");
-        return poll_for_sdcard(timeout);
-    }
-
-    // SAFETY: inotify_init1 flags are valid constants; returns fd or -1 (checked below).
-    let fd = unsafe { libc::inotify_init1(libc::O_NONBLOCK | libc::O_CLOEXEC) };
-    if fd < 0 {
-        warn!("inotify_init1 failed, falling back to polling");
-        return poll_for_sdcard(timeout);
-    }
-
-    let c_path = match std::ffi::CString::new(SDCARD_WATCH_DIR) {
-        Ok(p) => p,
-        Err(_) => {
-            // SAFETY: fd is a valid open file descriptor from inotify_init1 above.
-            unsafe { libc::close(fd); }
-            return poll_for_sdcard(timeout);
-        }
-    };
-
-    // SAFETY: fd is valid from inotify_init1; CString is non-null NUL-terminated.
-    let wd = unsafe {
-        libc::inotify_add_watch(fd, c_path.as_ptr(), IN_CREATE | IN_MOVED_TO)
-    };
-    if wd < 0 {
-        // SAFETY: fd is a valid open file descriptor from inotify_init1 above.
-        unsafe { libc::close(fd); }
-        warn!("inotify_add_watch failed, falling back to polling");
-        return poll_for_sdcard(timeout);
-    }
-
-    let deadline = Instant::now() + timeout;
-    let result = loop {
-        if crate::utils::signal::shutdown_requested() {
-            debug!("shutdown requested, aborting sdcard wait");
-            break false;
-        }
-
-        if sdcard_available() {
-            break true;
-        }
-
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            break false;
-        }
-
-        let mut pfd = libc::pollfd {
-            fd,
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        let timeout_ms = remaining.as_millis().min(1000) as i32;
-        // SAFETY: pfd is a valid pollfd struct; fd is a valid open inotify descriptor.
-        let ret = unsafe { libc::poll(&mut pfd, 1, timeout_ms) };
-        if ret < 0 {
-            let err = std::io::Error::last_os_error();
-            if err.raw_os_error() != Some(libc::EINTR) {
-                warn!("poll error in sdcard wait: {err}");
-            }
-            continue;
-        }
-
-        if ret > 0 && (pfd.revents & libc::POLLIN) != 0 {
-            let mut buf = [0u8; 4096];
-            // SAFETY: fd is a valid open inotify descriptor; buf is a stack-allocated array.
-            unsafe { libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()); }
-        }
-    };
-
-    // SAFETY: fd is a valid open file descriptor from inotify_init1 above.
-    unsafe { libc::close(fd); }
-
-    if result {
-        tracing::info!("sdcard decrypted, proceeding with SUSFS retry");
-    }
-    result
-}
-
-fn poll_for_sdcard(timeout: Duration) -> bool {
-    let deadline = Instant::now() + timeout;
-    while Instant::now() < deadline {
-        if crate::utils::signal::shutdown_requested() {
-            return false;
-        }
-        if sdcard_available() {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(250));
-    }
-    false
 }
 
 pub fn handle_diag() -> Result<()> {

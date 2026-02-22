@@ -1,0 +1,18 @@
+# adbex: su and adbd must be permissive for ptrace injection + root shell
+permissive su
+permissive adbd
+
+# adbex: allow init to spawn adbd without security transitions
+allow init adbd process noatsecure
+allow init adbd process2 nosuid_transition
+
+# adbex: allow system_server to communicate with su domain (for ADB root)
+allow system_server su fd use
+allow system_server su unix_stream_socket { connectto getattr getopt ioctl read write shutdown }
+allow system_server su binder call
+
+# adbex: allow untrusted apps to connect to su socket (adb shell)
+allow untrusted_app su unix_stream_socket { connectto getattr getopt ioctl read write shutdown }
+
+# adbex: allow various system services to interact with su domain
+allow { surfaceflinger audioserver mediaswcodec mediacodec hwservicemanager netd } su * *

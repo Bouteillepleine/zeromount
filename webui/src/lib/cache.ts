@@ -1,11 +1,11 @@
 import type {
   Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo,
   KsuModule, CapabilityFlags, ModuleStatus, MountStrategy,
-  BreneSettings, SusfsSettings, UnameSettings, MountSettings,
+  BreneSettings, SusfsSettings, UnameSettings, MountSettings, AdbSettings,
 } from './types';
 
 const CACHE_KEY = 'zm-state-cache';
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 
 export interface HydratableState {
   scenario: Scenario;
@@ -29,6 +29,7 @@ export interface HydratableState {
   susfs: SusfsSettings;
   uname: UnameSettings;
   mount: MountSettings;
+  adb: AdbSettings;
   verboseLogging: boolean;
 }
 
@@ -66,6 +67,7 @@ export function writeCache(state: HydratableState): void {
       susfs: state.susfs,
       uname: state.uname,
       mount: state.mount,
+      adb: state.adb,
       verboseLogging: state.verboseLogging,
     };
     localStorage.setItem(CACHE_KEY, JSON.stringify(serialized));
@@ -109,6 +111,7 @@ export function readCache(): HydratableState | null {
       susfs: cached.susfs,
       uname: cached.uname,
       mount: cached.mount,
+      adb: cached.adb,
       verboseLogging: cached.verboseLogging,
     };
   } catch (e) {

@@ -56,6 +56,7 @@ fi
 
 SCRIPTS=(
     action.sh
+    boot-completed.sh
     common.sh
     post-fs-data.sh
     metamount.sh
@@ -109,6 +110,63 @@ build_rust() {
     echo "==> [$profile] All Rust targets built"
 }
 
+build_adbex() {
+    local adbex_src="${ADBEX_SRC:-$PROJECT_ROOT/external/adbex}"
+    if [ ! -f "$adbex_src/inject.c" ]; then
+        echo "WARN: adbex source not found at $adbex_src, skipping" >&2
+        return 0
+    fi
+
+    local api=23
+    local build_dir="$PROJECT_ROOT/target/adbex"
+
+    # ptrace.h only supports aarch64 + x86_64 — ARM32/x86 hit #error
+    declare -A CLANG_TARGET=(
+        [arm64-v8a]=aarch64-linux-android
+        [x86_64]=x86_64-linux-android
+    )
+
+    for abi in "${!CLANG_TARGET[@]}"; do
+        local prefix="${CLANG_TARGET[$abi]}"
+        local cc="$NDK_BIN/${prefix}${api}-clang"
+        local ar="$NDK_BIN/llvm-ar"
+        local out="$build_dir/$abi"
+
+        if [ ! -x "$cc" ]; then
+            echo "WARN: clang not found for $abi ($cc), skipping" >&2
+            continue
+        fi
+
+        echo "==> [adbex] Building $abi"
+        mkdir -p "$out"
+
+        local cflags="-fvisibility=hidden -Os -DANDROID"
+
+        "$cc" $cflags -c "$adbex_src/external/plthook/plthook_elf.c" \
+            -I"$adbex_src/external/plthook" -o "$out/plthook_elf.o"
+        "$ar" rcs "$out/libplthook.a" "$out/plthook_elf.o"
+
+        "$cc" $cflags -s \
+            "$adbex_src/inject.c" "$adbex_src/ptrace.c" "$adbex_src/utils.c" \
+            -o "$out/adbex_inject"
+
+        "$cc" $cflags -shared -s \
+            "$adbex_src/adbex_init.c" "$adbex_src/utils.c" \
+            -I"$adbex_src/external/plthook" -L"$out" -lplthook \
+            -o "$out/libadbex_init.so"
+
+        "$cc" $cflags -shared -s \
+            "$adbex_src/adbex_adbd.c" "$adbex_src/utils.c" \
+            -ldl -o "$out/libadbex_adbd.so"
+
+        mkdir -p "$MODULE_DIR/bin/$abi" "$MODULE_DIR/lib/$abi"
+        cp "$out/adbex_inject" "$MODULE_DIR/bin/$abi/"
+        cp "$out/libadbex_init.so" "$MODULE_DIR/lib/$abi/"
+        cp "$out/libadbex_adbd.so" "$MODULE_DIR/lib/$abi/"
+    done
+    echo "==> [adbex] All targets built"
+}
+
 # Package one ZIP from a given Rust profile
 package_zip() {
     local profile="$1"
@@ -143,6 +201,10 @@ package_zip() {
     fi
     cp "$MODULE_DIR/module.prop" "$staging/module.prop"
 
+    if [ -f "$MODULE_DIR/sepolicy.rule" ]; then
+        cp "$MODULE_DIR/sepolicy.rule" "$staging/sepolicy.rule"
+    fi
+
     sed -i "s/^version=.*/version=${VERSION}/" "$staging/module.prop"
     local vcode="${VERSION#v}"
     vcode="${vcode%%-*}"
@@ -165,6 +227,17 @@ package_zip() {
 
         if [ -f "$MODULE_DIR/bin/$abi/aapt" ]; then
             cp "$MODULE_DIR/bin/$abi/aapt" "$staging/bin/$abi/aapt"
+        fi
+
+        # adbex prebuilt staging (binaries present when available)
+        if [ -f "$MODULE_DIR/bin/$abi/adbex_inject" ]; then
+            cp "$MODULE_DIR/bin/$abi/adbex_inject" "$staging/bin/$abi/adbex_inject"
+        fi
+        if [ -d "$MODULE_DIR/lib/$abi" ]; then
+            mkdir -p "$staging/lib/$abi"
+            for so in "$MODULE_DIR/lib/$abi"/libadbex_init.so "$MODULE_DIR/lib/$abi"/libadbex_adbd.so; do
+                [ -f "$so" ] && cp "$so" "$staging/lib/$abi/"
+            done
         fi
     done
 
@@ -198,6 +271,11 @@ package_zip() {
     if [ -d "$MODULE_DIR/lkm" ] && ls "$MODULE_DIR/lkm"/*.ko >/dev/null 2>&1; then
         mkdir -p "$staging/lkm"
         cp "$MODULE_DIR/lkm"/*.ko "$staging/lkm/"
+    fi
+
+    # Emoji font
+    if [ -d "$MODULE_DIR/emoji" ]; then
+        cp -r "$MODULE_DIR/emoji" "$staging/emoji"
     fi
 
     # META-INF
@@ -255,6 +333,8 @@ if [ "$BUILD" = true ]; then
 
     build_rust "debug"
     build_rust "release"
+
+    build_adbex
 
     if [ -f "$WEBUI_DIR/package.json" ]; then
         echo "==> Building WebUI"

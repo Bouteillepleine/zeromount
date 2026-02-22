@@ -685,12 +685,36 @@ export function SettingsTab() {
           </div>
           <Toggle checked={store.settings.brene.prop_spoofing} onChange={(v) => handleBreneToggle('prop_spoofing', v)} />
         </div>
-        <div class="settings__item">
+        <div class={`settings__item${!susfsAvailable() ? ' settings__item--disabled' : ''}`}>
           <div class="settings__item-content">
             <div class="settings__item-label">Hide Stock Overlays</div>
-            <div class="settings__item-desc">Hide overlay filesystem artifacts from detection processes</div>
+            <div class="settings__item-desc">
+              {susfsAvailable()
+                ? 'Unmount OEM overlay mounts that trigger detection'
+                : 'Requires SUSFS kernel support'}
+            </div>
           </div>
-          <Toggle checked={store.settings.mount.hide_stock_overlays} onChange={(v) => store.setMountToggle('hide_stock_overlays', v)} />
+          <Toggle checked={store.settings.mount.hide_stock_overlays} onChange={(v) => store.setMountToggle('hide_stock_overlays', v)} disabled={!susfsAvailable()} />
+        </div>
+        <div class="settings__item">
+          <div class="settings__item-content">
+            <div class="settings__item-label">Hide USB Debugging</div>
+            <div class="settings__item-desc">Hide USB debugging from prop level - use with HMA-OSS for full coverage</div>
+          </div>
+          <Toggle
+            checked={store.settings.adb.hide_usb_debugging}
+            onChange={(v) => store.setAdbToggle('hide_usb_debugging', v)}
+          />
+        </div>
+        <div class="settings__item">
+          <div class="settings__item-content">
+            <div class="settings__item-label">ADB Root</div>
+            <div class="settings__item-desc">Run ADB as root for developers - requires reboot</div>
+          </div>
+          <Toggle
+            checked={store.settings.adb.adb_root}
+            onChange={(v) => store.setAdbToggle('adb_root', v)}
+          />
         </div>
       </Card>
 
@@ -710,6 +734,33 @@ export function SettingsTab() {
           <Toggle
             checked={store.settings.perf.enabled}
             onChange={(v) => store.setPerfToggle('enabled', v)}
+          />
+        </div>
+      </Card>
+
+      <Card>
+        <h3 class="settings__section-title">
+          <svg class="settings__section-icon" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="8.5" cy="9.5" r="1.5"/>
+            <circle cx="15.5" cy="9.5" r="1.5"/>
+            <path d="M12 18c-3.31 0-6-2.69-6-6h1.5c0 2.76 2.24 5 4.5 5s4.5-2.24 4.5-5H18c0 3.31-2.69 6-6 6z"/>
+            <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/>
+          </svg>
+          Emoji
+        </h3>
+        <div class={`settings__item${store.emojiConflict() ? ' settings__item--disabled' : ''}`}>
+          <div class="settings__item-content">
+            <div class="settings__item-label">Facebook Emojis</div>
+            <div class="settings__item-desc">
+              {store.emojiConflict()
+                ? `Conflicting font module: ${store.emojiConflict()}`
+                : 'Replace system emojis with Facebook 15.0 style'}
+            </div>
+          </div>
+          <Toggle
+            checked={store.settings.emoji.enabled}
+            onChange={(v) => store.setEmojiToggle('enabled', v)}
+            disabled={!!store.emojiConflict()}
           />
         </div>
       </Card>

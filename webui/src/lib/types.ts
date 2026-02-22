@@ -77,6 +77,7 @@ export interface RuntimeStatus {
   root_manager: string | null;
   mount_source: string | null;
   resolved_storage_mode: string | null;
+  emoji_applied?: boolean;
 }
 
 export interface KsuModule {
@@ -137,6 +138,15 @@ export interface PerfSettings {
   enabled: boolean;
 }
 
+export interface EmojiSettings {
+  enabled: boolean;
+}
+
+export interface AdbSettings {
+  hide_usb_debugging: boolean;
+  adb_root: boolean;
+}
+
 export type UnameMode = 'disabled' | 'static' | 'dynamic';
 
 export interface UnameSettings {
@@ -168,6 +178,8 @@ export interface Settings {
   uname: UnameSettings;
   mount: MountSettings;
   perf: PerfSettings;
+  emoji: EmojiSettings;
+  adb: AdbSettings;
 }
 
 export type Scenario = 'full' | 'susfs_frontend' | 'kernel_only' | 'susfs_only' | 'none';
@@ -183,7 +195,10 @@ export interface WebUiInitResponse {
     brene: BreneSettings;
     uname: UnameSettings;
     perf: PerfSettings;
+    emoji: EmojiSettings;
+    adb: AdbSettings;
   };
+  emoji_conflict: string | null;
   system_info: {
     kernelVersion: string;
     uptime: string;

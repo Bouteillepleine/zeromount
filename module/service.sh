@@ -42,30 +42,82 @@ spoof_props() {
 }
 spoof_props
 
+# Track background PIDs for cleanup
+_bg_pids=""
+
+hide_usb_debugging() {
+    ENABLED=$("$BIN" config get adb.hide_usb_debugging 2>/dev/null)
+    if [ "$ENABLED" != "true" ]; then
+        echo "zeromount: hide_usb_debugging disabled, skipping" > /dev/kmsg 2>/dev/null
+        return 0
+    fi
+
+    if ! command -v resetprop >/dev/null 2>&1; then
+        echo "zeromount: resetprop not found, skipping USB debug hiding" > /dev/kmsg 2>/dev/null
+        return 1
+    fi
+
+    echo "zeromount: hide_usb_debugging starting" > /dev/kmsg 2>/dev/null
+
+    # Dynamic prop discovery from build.prop files
+    PROP_FILE="/data/adb/zeromount/.hide_debug_props"
+    rm -f "$PROP_FILE"
+    _dyn_count=0
+    for propfile in /default.prop /system/build.prop /vendor/build.prop \
+                    /product/build.prop /vendor/odm/etc/build.prop \
+                    /system/system/build.prop /system_ext/build.prop; do
+        [ -f "$propfile" ] || continue
+        grep "^ro\." "$propfile" | grep "userdebug" >> "$PROP_FILE" 2>/dev/null
+        grep "^ro\." "$propfile" | grep "test-keys" >> "$PROP_FILE" 2>/dev/null
+    done
+    if [ -f "$PROP_FILE" ]; then
+        _dyn_count=$(wc -l < "$PROP_FILE")
+        sed -i 's/userdebug/user/g' "$PROP_FILE"
+        sed -i 's/test-keys/release-keys/g' "$PROP_FILE"
+        resetprop --file "$PROP_FILE" 2>/dev/null
+        rm -f "$PROP_FILE"
+    fi
+    echo "zeromount: dynamic props overridden: ${_dyn_count}" > /dev/kmsg 2>/dev/null
+
+    # Static safe props (NEVER touch sys.usb.* -- those kill ADB transport)
+    resetprop -n init.svc.adbd stopped
+    resetprop -n service.adb.root 0
+    resetprop -n service.adb.tcp.port -1
+    resetprop -n persist.service.adb.enable 0
+    resetprop -n persist.vendor.usb.config none
+    resetprop -n vendor.usb.config none
+
+    resetprop -n ro.debuggable 0
+    resetprop -n persist.sys.debuggable 0
+    resetprop -n persist.service.debuggerd.enable 0
+    resetprop -n dalvik.vm.checkjni false
+    resetprop -n ro.kernel.android.checkjni 0
+    resetprop -n ro.boot.vbmeta.device_state locked
+    resetprop -n ro.boot.verifiedbootstate green
+    resetprop -n ro.boot.flash.locked 1
+    resetprop -n ro.boot.warranty_bit 0
+    resetprop -n ro.warranty_bit 0
+    resetprop -n ro.boot.mode normal
+    resetprop -n ro.bootmode normal
+
+    echo "zeromount: static debug props set (19 props via resetprop -n)" > /dev/kmsg 2>/dev/null
+
+    # init.svc.adbd resets itself when adbd restarts -- keep overriding
+    while true; do
+        resetprop -n init.svc.adbd stopped
+        sleep 2
+    done &
+    _bg_pids="$_bg_pids $!"
+    echo "zeromount: adbd prop loop started (pid $!)" > /dev/kmsg 2>/dev/null
+}
+hide_usb_debugging
+
 # Performance tuning + input boost daemon (Rust-native, auto-detects device)
 if [ "$("$BIN" config get perf.enabled 2>/dev/null)" = "true" ]; then
     "$BIN" perf &
-    _perf_pid=$!
+    _bg_pids="$_bg_pids $!"
 fi
 
-# Reset bootloop counter only after the system actually finishes booting
-(
-    trap 'exit 0' TERM INT
-    i=0
-    while [ "$i" -lt 180 ]; do
-        [ "$(getprop sys.boot_completed)" = "1" ] && {
-            rm -f /data/adb/zeromount/.bootcount
-            exit 0
-        }
-        sleep 1
-        i=$((i + 1))
-    done
-) &
-
-# Deferred SUSFS — waits for sdcard decryption via inotify, then retries path hiding
-"$BIN" mount --susfs-retry --wait &
-_susfs_pid=$!
-trap 'kill $_perf_pid $_susfs_pid 2>/dev/null; rm -f "$LOCKFILE"' EXIT
-
-# Keep service.sh alive while perf daemon and SUSFS retry run
+# Final trap covers all background PIDs
+trap 'kill $_bg_pids 2>/dev/null; rm -f "$LOCKFILE"' EXIT
 wait

@@ -1,6 +1,6 @@
 import { createSignal, createRoot, createMemo, createEffect } from 'solid-js';
 import { createStore } from 'solid-js/store';
-import type { Tab, Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo, Settings, InstalledApp, KsuModule, CapabilityFlags, ModuleStatus, BreneSettings, SusfsSettings, PerfSettings, UnameSettings, UnameMode, MountSettings, StorageMode, MountStrategy, WebUiInitResponse } from './types';
+import type { Tab, Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo, Settings, InstalledApp, KsuModule, CapabilityFlags, ModuleStatus, BreneSettings, SusfsSettings, PerfSettings, EmojiSettings, AdbSettings, UnameSettings, UnameMode, MountSettings, StorageMode, MountStrategy, WebUiInitResponse } from './types';
 import { api, shouldUseMock } from './api';
 import { listPackages, getPackagesInfo, getAppLabelViaAapt } from './ksuApi';
 import { darkTheme, lightTheme, amoledTheme, applyTheme, getAccentStyles, accentPresets, accentNames } from './theme';
@@ -53,6 +53,7 @@ function createAppStore() {
   const [capabilities, setCapabilities] = createSignal<CapabilityFlags | null>(null);
   const [moduleStatuses, setModuleStatuses] = createSignal<ModuleStatus[]>([]);
   const [fontModules, setFontModules] = createSignal<string[]>([]);
+  const [emojiConflict, setEmojiConflict] = createSignal<string | null>(null);
   const [degraded, setDegraded] = createSignal(false);
   const [degradationReason, setDegradationReason] = createSignal<string | null>(null);
   const [rootManager, setRootManager] = createSignal<string | null>(null);
@@ -140,6 +141,11 @@ function createAppStore() {
     enabled: false,
   };
 
+  const defaultAdb: AdbSettings = {
+    hide_usb_debugging: false,
+    adb_root: false,
+  };
+
   const [settings, setSettings] = createStore<Settings>({
     theme: (savedTheme || 'amoled') as 'dark' | 'light' | 'auto' | 'amoled',
     accentColor: initialAccent,
@@ -151,6 +157,8 @@ function createAppStore() {
     uname: { ...defaultUname },
     mount: { ...defaultMount },
     perf: { ...defaultPerf },
+    emoji: { enabled: false },
+    adb: { ...defaultAdb },
   });
 
   const [systemPrefersDark, setSystemPrefersDark] = createSignal(
@@ -266,6 +274,7 @@ function createAppStore() {
     setSettings('susfs', prev => ({ ...prev, ...cached.susfs }));
     setSettings('uname', prev => ({ ...prev, ...cached.uname }));
     setSettings('mount', prev => ({ ...prev, ...cached.mount }));
+    setSettings('adb', prev => ({ ...prev, ...cached.adb }));
     setSettings({ verboseLogging: cached.verboseLogging });
     return true;
   };
@@ -292,6 +301,7 @@ function createAppStore() {
     susfs: { ...settings.susfs },
     uname: { ...settings.uname },
     mount: { ...settings.mount },
+    adb: { ...settings.adb },
     verboseLogging: settings.verboseLogging,
   });
 
@@ -361,6 +371,7 @@ function createAppStore() {
         random_mount_paths: cfg.mount.random_mount_paths ?? prev.random_mount_paths,
         mount_source: cfg.mount.mount_source ?? prev.mount_source,
         overlay_source: cfg.mount.overlay_source ?? prev.overlay_source,
+        hide_stock_overlays: cfg.mount.hide_stock_overlays ?? prev.hide_stock_overlays,
       }));
     }
     if (cfg.perf) {
@@ -369,6 +380,21 @@ function createAppStore() {
         enabled: typeof cfg.perf.enabled === 'boolean' ? cfg.perf.enabled : prev.enabled,
       }));
     }
+    if (cfg.emoji) {
+      setSettings('emoji', prev => ({
+        ...prev,
+        enabled: typeof cfg.emoji.enabled === 'boolean' ? cfg.emoji.enabled : prev.enabled,
+      }));
+    }
+    if (cfg.adb) {
+      setSettings('adb', prev => ({
+        ...prev,
+        hide_usb_debugging: typeof cfg.adb.hide_usb_debugging === 'boolean' ? cfg.adb.hide_usb_debugging : prev.hide_usb_debugging,
+        adb_root: typeof cfg.adb.adb_root === 'boolean' ? cfg.adb.adb_root : prev.adb_root,
+      }));
+    }
+    setEmojiConflict(data.emoji_conflict || null);
+
     if (cfg.logging) {
       setSettings({ verboseLogging: typeof cfg.logging.verbose === 'boolean' ? cfg.logging.verbose : settings.verboseLogging });
     }
@@ -459,6 +485,7 @@ function createAppStore() {
       loadBreneSettings(dump),
       loadSusfsSettings(dump),
       loadPerfSettings(dump),
+      loadAdbSettings(dump),
       loadMountSettings(dump),
       loadVerboseState(dump),
     ]);
@@ -811,6 +838,30 @@ function createAppStore() {
     }
   };
 
+  const setEmojiToggle = async (key: keyof EmojiSettings, value: boolean) => {
+    setSettings('emoji', key, value);
+    try {
+      await api.configSet(`emoji.${key}`, String(value));
+      pushActivity('setting_changed', `emoji.${key} → ${value ? 'ON' : 'OFF'}`);
+    } catch (e) {
+      console.error('[ZM-Store] setEmojiToggle() error:', e);
+      showToast(`Failed to save ${key}`, 'error');
+      setSettings('emoji', key, !value);
+    }
+  };
+
+  const setAdbToggle = async (key: keyof AdbSettings, value: boolean) => {
+    setSettings('adb', key, value);
+    try {
+      await api.configSet(`adb.${key}`, String(value));
+      pushActivity('setting_changed', `adb.${key} → ${value ? 'ON' : 'OFF'}`);
+    } catch (e) {
+      console.error('[ZM-Store] setAdbToggle() error:', e);
+      showToast(`Failed to save ${key}`, 'error');
+      setSettings('adb', key, !value);
+    }
+  };
+
   const setUnameMode = async (mode: UnameMode) => {
     const prev = settings.uname.mode;
     setSettings('uname', 'mode', mode);
@@ -879,6 +930,31 @@ function createAppStore() {
     if (result !== null) {
       setSettings('perf', 'enabled', result === 'true');
     }
+  };
+
+  const loadAdbSettings = async (dump?: Record<string, any> | null) => {
+    if (dump?.adb) {
+      const a = dump.adb;
+      const adb: Partial<AdbSettings> = {};
+      for (const key of ['hide_usb_debugging', 'adb_root'] as (keyof AdbSettings)[]) {
+        if (key in a) {
+          const v = a[key];
+          adb[key] = typeof v === 'boolean' ? v : String(v) === 'true';
+        }
+      }
+      setSettings('adb', prev => ({ ...prev, ...adb }));
+      return;
+    }
+
+    const keys: (keyof AdbSettings)[] = ['hide_usb_debugging', 'adb_root'];
+    const results = await Promise.allSettled(keys.map(k => api.configGet(`adb.${k}`)));
+    const adb: Partial<AdbSettings> = {};
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled' && r.value !== null) {
+        adb[keys[i]] = r.value === 'true';
+      }
+    });
+    setSettings('adb', prev => ({ ...prev, ...adb }));
   };
 
   const loadMountSettings = async (dump?: Record<string, any> | null) => {
@@ -1319,6 +1395,9 @@ function createAppStore() {
     setBreneToggle,
     setSusfsToggle,
     setPerfToggle,
+    setEmojiToggle,
+    setAdbToggle,
+    emojiConflict,
     setUnameMode,
     setUnameField,
     loadMountSettings,
