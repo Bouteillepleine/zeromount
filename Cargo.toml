@@ -1,6 +1,6 @@
 [package]
 name = "zeromount"
-version = "2.0.24-dev"
+version = "2.0.47-dev"
 edition = "2021"
 
 [dependencies]
