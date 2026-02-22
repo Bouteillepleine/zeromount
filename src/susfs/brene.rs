@@ -81,12 +81,7 @@ pub struct FontModuleInfo {
     pub redirect_count: u32,
 }
 
-/// Apply BRENE (Be Root, ENjoy Everything) toggles via SUSFS.
-/// Mount hiding is intentionally excluded (S05).
-/// Property spoofing uses resetprop (not SUSFS) and is handled separately.
-/// `skip_path_hide`: true at boot (sdcard not decrypted, all add_sus_path calls EINVAL).
-/// apply_brene_deferred handles path hiding after sdcard is available.
-pub fn apply_brene(client: &SusfsClient, config: &ZeroMountConfig, skip_path_hide: bool, fonts_overlay_mounted: bool, _susfs_mode: SusfsMode) -> Result<BreneResult> {
+pub fn apply_brene(client: &SusfsClient, config: &ZeroMountConfig, fonts_overlay_mounted: bool, _susfs_mode: SusfsMode) -> Result<BreneResult> {
     let mut result = BreneResult::default();
 
     if !client.is_available() {
@@ -103,34 +98,28 @@ pub fn apply_brene(client: &SusfsClient, config: &ZeroMountConfig, skip_path_hid
     let _has_open_redirect = client.features().open_redirect && susfs_cfg.open_redirect;
     let _has_kstat = client.features().kstat && susfs_cfg.kstat;
 
-    // -- Auto-hide toggles (path-based) --
-    // Skipped at boot — deferred retry handles all path hiding after sdcard decryption
+    if brene.auto_hide_rooted_folders && has_path {
+        let count = paths::hide_paths(client, ROOTED_FOLDER_PATHS).unwrap_or(0);
+        result.paths_hidden += count;
+        info!("BRENE: rooted folders hidden ({count})");
+    }
 
-    if !skip_path_hide {
-        if brene.auto_hide_rooted_folders && has_path {
-            let count = paths::hide_paths(client, ROOTED_FOLDER_PATHS).unwrap_or(0);
-            result.paths_hidden += count;
-            info!("BRENE: rooted folders hidden ({count})");
-        }
+    if brene.auto_hide_recovery && has_path {
+        let count = paths::hide_paths(client, RECOVERY_PATHS).unwrap_or(0);
+        result.paths_hidden += count;
+        info!("BRENE: recovery paths hidden ({count})");
+    }
 
-        if brene.auto_hide_recovery && has_path {
-            let count = paths::hide_paths(client, RECOVERY_PATHS).unwrap_or(0);
-            result.paths_hidden += count;
-            info!("BRENE: recovery paths hidden ({count})");
-        }
+    if brene.auto_hide_tmp && has_path {
+        let count = paths::hide_dir_children_loop(client, TMP_PATHS).unwrap_or(0);
+        result.paths_hidden += count;
+        info!("BRENE: tmp children hidden via path_loop ({count})");
+    }
 
-        if brene.auto_hide_tmp && has_path {
-            let count = paths::hide_dir_children_loop(client, TMP_PATHS).unwrap_or(0);
-            result.paths_hidden += count;
-            info!("BRENE: tmp children hidden via path_loop ({count})");
-        }
-
-        if brene.auto_hide_apk && has_path {
-            let count = hide_apk_paths(client);
-            result.paths_hidden += count;
-            info!("BRENE: APK paths hidden ({count})");
-        }
-
+    if brene.auto_hide_apk && has_path {
+        let count = hide_apk_paths(client);
+        result.paths_hidden += count;
+        info!("BRENE: APK paths hidden ({count})");
     }
 
     // -- Maps hiding --
@@ -176,20 +165,18 @@ pub fn apply_brene(client: &SusfsClient, config: &ZeroMountConfig, skip_path_hid
 
     // -- Custom user-defined lists --
 
-    if !skip_path_hide {
-        if !brene.custom_sus_paths.is_empty() && has_path {
-            let path_refs: Vec<&str> = brene.custom_sus_paths.iter().map(|s| s.as_str()).collect();
-            let count = paths::hide_paths(client, &path_refs).unwrap_or(0);
-            result.paths_hidden += count;
-            info!("BRENE: custom sus_paths hidden ({count}/{})", path_refs.len());
-        }
+    if !brene.custom_sus_paths.is_empty() && has_path {
+        let path_refs: Vec<&str> = brene.custom_sus_paths.iter().map(|s| s.as_str()).collect();
+        let count = paths::hide_paths(client, &path_refs).unwrap_or(0);
+        result.paths_hidden += count;
+        info!("BRENE: custom sus_paths hidden ({count}/{})", path_refs.len());
+    }
 
-        if !brene.custom_sus_path_loops.is_empty() && has_path {
-            let path_refs: Vec<&str> = brene.custom_sus_path_loops.iter().map(|s| s.as_str()).collect();
-            let count = paths::hide_paths_loop(client, &path_refs).unwrap_or(0);
-            result.paths_hidden += count;
-            info!("BRENE: custom sus_path_loops hidden ({count}/{})", path_refs.len());
-        }
+    if !brene.custom_sus_path_loops.is_empty() && has_path {
+        let path_refs: Vec<&str> = brene.custom_sus_path_loops.iter().map(|s| s.as_str()).collect();
+        let count = paths::hide_paths_loop(client, &path_refs).unwrap_or(0);
+        result.paths_hidden += count;
+        info!("BRENE: custom sus_path_loops hidden ({count}/{})", path_refs.len());
     }
 
     if !brene.custom_sus_maps.is_empty() && has_maps {
@@ -828,97 +815,6 @@ pub fn sync_susfs_config(config: &ZeroMountConfig) -> Result<()> {
 /// Deferred BRENE: only re-run path-hiding operations that require
 /// android_data_root_path (which isn't available at boot time).
 /// Maps, mounts, AVC, log, uname, fonts all succeed at boot — skip them.
-pub fn apply_brene_deferred(client: &SusfsClient, config: &ZeroMountConfig, _susfs_mode: SusfsMode) -> Result<BreneResult> {
-    let mut result = BreneResult::default();
-
-    if !client.is_available() {
-        return Ok(result);
-    }
-
-    let brene = &config.brene;
-    // Combine kernel capability with user config sub-toggle
-    let has_path = client.features().path && config.susfs.path_hide;
-
-    if brene.auto_hide_rooted_folders && has_path {
-        let count = paths::hide_paths(client, ROOTED_FOLDER_PATHS).unwrap_or(0);
-        result.paths_hidden += count;
-        info!("BRENE deferred: rooted folders hidden ({count})");
-    }
-
-    if brene.auto_hide_recovery && has_path {
-        let count = paths::hide_paths(client, RECOVERY_PATHS).unwrap_or(0);
-        result.paths_hidden += count;
-        info!("BRENE deferred: recovery paths hidden ({count})");
-    }
-
-    if brene.auto_hide_tmp && has_path {
-        let count = paths::hide_dir_children_loop(client, TMP_PATHS).unwrap_or(0);
-        result.paths_hidden += count;
-        info!("BRENE deferred: tmp children hidden via path_loop ({count})");
-    }
-
-    if brene.auto_hide_apk && has_path {
-        let count = hide_apk_paths(client);
-        result.paths_hidden += count;
-        info!("BRENE deferred: APK paths hidden ({count})");
-    }
-
-    if !brene.custom_sus_paths.is_empty() && has_path {
-        let path_refs: Vec<&str> = brene.custom_sus_paths.iter().map(|s| s.as_str()).collect();
-        let count = paths::hide_paths(client, &path_refs).unwrap_or(0);
-        result.paths_hidden += count;
-        info!("BRENE deferred: custom sus_paths hidden ({count})");
-    }
-
-    if !brene.custom_sus_path_loops.is_empty() && has_path {
-        let path_refs: Vec<&str> = brene.custom_sus_path_loops.iter().map(|s| s.as_str()).collect();
-        let count = paths::hide_paths_loop(client, &path_refs).unwrap_or(0);
-        result.paths_hidden += count;
-        info!("BRENE deferred: custom sus_path_loops hidden ({count})");
-    }
-
-    // Requires kernel with hash table readdir fix (susfs_should_hide_dirent)
-    // to avoid readdir-vs-stat mismatch on FUSE
-    if brene.emulate_vold_app_data && has_path {
-        let count = emulate_vold_app_data(client);
-        result.paths_hidden += count;
-        if count > 0 {
-            info!("BRENE deferred: vold app data isolation ({count} packages)");
-        }
-    }
-
-    if brene.auto_hide_fonts && has_path {
-        let count = hide_font_replacement_paths(client);
-        result.paths_hidden += count;
-        if count > 0 {
-            info!("BRENE deferred: font replacement paths hidden ({count})");
-        }
-    }
-
-    // -- Emoji app overrides (FB + GBoard + GMS) --
-    if config.emoji.enabled {
-        let status_path = std::path::Path::new("/data/adb/zeromount/.status.json");
-        let has_conflict = std::fs::read_to_string(status_path)
-            .ok()
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get("font_modules")?.as_array().map(|a| !a.is_empty()))
-            .unwrap_or(false);
-
-        if !has_conflict {
-            info!("BRENE deferred: applying emoji app overrides");
-            let app_result = super::emoji::apply_emoji_app_overrides();
-            info!("BRENE deferred: emoji app overrides — fb={}/{}, gboard={}, gms={}",
-                  app_result.fb_succeeded, app_result.fb_total,
-                  app_result.gboard_ok, app_result.gms_ok);
-        } else {
-            warn!("BRENE deferred: emoji app overrides SKIPPED — font module conflict");
-        }
-    }
-
-    info!("BRENE deferred complete: {} paths hidden", result.paths_hidden);
-    Ok(result)
-}
-
 fn emulate_vold_app_data(client: &SusfsClient) -> u32 {
     let output = match run_command_with_timeout(
         Command::new("pm").args(["list", "packages", "-3"]),
@@ -1112,7 +1008,7 @@ mod tests {
     fn brene_skips_when_susfs_unavailable() {
         let client = SusfsClient::new_for_test(false, SusfsFeatures::default());
         let config = ZeroMountConfig::default();
-        let result = apply_brene(&client, &config, false, false, SusfsMode::Enhanced).expect("should not error");
+        let result = apply_brene(&client, &config, false, SusfsMode::Enhanced).expect("should not error");
         assert_eq!(result.paths_hidden, 0);
         assert_eq!(result.maps_hidden, 0);
         assert!(!result.uname_spoofed);

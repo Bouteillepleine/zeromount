@@ -47,13 +47,7 @@ fn main() -> Result<()> {
     utils::signal::register_shutdown_handler();
 
     match cli.command {
-        Commands::Mount { susfs_retry, wait } => {
-            if susfs_retry {
-                cli::handlers::handle_susfs_retry(wait)
-            } else {
-                cli::handlers::handle_mount()
-            }
-        }
+        Commands::Mount => cli::handlers::handle_mount(),
         Commands::Detect => cli::handlers::handle_detect(),
         Commands::Status { json } => cli::handlers::handle_status(json),
         Commands::Module { action } => cli::handlers::handle_module(action),

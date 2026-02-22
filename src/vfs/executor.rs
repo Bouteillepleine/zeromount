@@ -192,7 +192,7 @@ impl VfsExecutor {
     }
 
     /// Apply SUSFS protections for a module's injected files.
-    /// Phase 2: kstat only — path hiding deferred until sdcard is decrypted.
+    /// Phase 2: kstat + path hiding for module files.
     fn apply_susfs_protections(&self, susfs: &SusfsClient, module: &ScannedModule) {
         apply_module_susfs_protections(susfs, module, Some(&self.susfs_config), false, true);
     }
@@ -212,13 +212,6 @@ pub(crate) fn is_brene_owned_target(target: &Path) -> bool {
 }
 
 /// Apply SUSFS kstat spoofing + path hiding for a single module's files.
-///
-/// This is the standalone entry point used by both the VFS pipeline (via
-/// `VfsExecutor::apply_susfs_protections`) and the CLI deferred-retry path.
-///
-/// `susfs_config`: user config sub-toggles (kstat, path_hide). None = all enabled (legacy callers).
-/// `skip_kstat`: skip kstat spoofing (deferred retry — already done at boot)
-/// `skip_path_hide`: skip add_sus_path (boot — sdcard not decrypted, always EINVAL)
 pub fn apply_module_susfs_protections(
     susfs: &SusfsClient,
     module: &ScannedModule,

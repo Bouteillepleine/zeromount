@@ -433,7 +433,7 @@ impl MountController<Mounted> {
                 });
 
                 let susfs_mode = self.state.detection.capabilities.susfs_mode;
-                match crate::susfs::brene::apply_brene(&client, &self.state.config, true, fonts_overlay_mounted, susfs_mode) {
+                match crate::susfs::brene::apply_brene(&client, &self.state.config, fonts_overlay_mounted, susfs_mode) {
                     Ok(brene) => {
                         debug!(
                             paths = brene.paths_hidden,

@@ -17,14 +17,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Full mount pipeline (called by metamount.sh)
-    Mount {
-        /// Retry SUSFS path hiding after sdcard decryption
-        #[arg(long)]
-        susfs_retry: bool,
-        /// Block until sdcard is decrypted before running retry (inotify-driven)
-        #[arg(long, requires = "susfs_retry")]
-        wait: bool,
-    },
+    Mount,
     /// Probe kernel capabilities, write detection JSON
     Detect,
     /// Engine state, modules, scenario
