@@ -123,7 +123,6 @@ export interface BreneSettings {
   auto_hide_rooted_folders: boolean;
   auto_hide_recovery: boolean;
   auto_hide_tmp: boolean;
-  auto_hide_sdcard_data: boolean;
   avc_log_spoofing: boolean;
   susfs_log: boolean;
   hide_sus_mounts: boolean;

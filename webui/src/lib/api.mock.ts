@@ -321,7 +321,6 @@ const mockBreneConfig: Record<string, string> = {
   'brene.auto_hide_rooted_folders': 'true',
   'brene.auto_hide_recovery': 'true',
   'brene.auto_hide_tmp': 'true',
-  'brene.auto_hide_sdcard_data': 'true',
   'brene.avc_log_spoofing': 'false',
   'uname.mode': 'disabled',
   'mount.storage_mode': 'auto',

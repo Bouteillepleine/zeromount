@@ -673,13 +673,6 @@ export function SettingsTab() {
                   </div>
                   <div class="settings__item">
                     <div class="settings__item-content">
-                      <div class="settings__item-label">Hide /sdcard/Android/data</div>
-                      <div class="settings__item-desc">Hide sensitive app data on sdcard</div>
-                    </div>
-                    <Toggle checked={store.settings.brene.auto_hide_sdcard_data} onChange={(v) => handleBreneToggle('auto_hide_sdcard_data', v)} />
-                  </div>
-                  <div class="settings__item">
-                    <div class="settings__item-content">
                       <div class="settings__item-label">Kernel Umount</div>
                       <div class="settings__item-desc">Enable kernel-level module unmounting via ksud</div>
                     </div>

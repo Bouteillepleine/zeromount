@@ -161,8 +161,6 @@ pub struct BreneConfig {
     #[serde(default = "default_true")]
     pub auto_hide_tmp: bool,
     #[serde(default = "default_true")]
-    pub auto_hide_sdcard_data: bool,
-    #[serde(default = "default_true")]
     pub avc_log_spoofing: bool,
     #[serde(default)]
     pub susfs_log: bool,
@@ -203,7 +201,6 @@ impl Default for BreneConfig {
             auto_hide_rooted_folders: true,
             auto_hide_recovery: true,
             auto_hide_tmp: true,
-            auto_hide_sdcard_data: true,
             avc_log_spoofing: true,
             susfs_log: false,
             hide_sus_mounts: true,
@@ -511,7 +508,6 @@ impl ZeroMountConfig {
             }
             "brene.auto_hide_recovery" => Some(self.brene.auto_hide_recovery.to_string()),
             "brene.auto_hide_tmp" => Some(self.brene.auto_hide_tmp.to_string()),
-            "brene.auto_hide_sdcard_data" => Some(self.brene.auto_hide_sdcard_data.to_string()),
             "brene.avc_log_spoofing" => Some(self.brene.avc_log_spoofing.to_string()),
             "brene.susfs_log" => Some(self.brene.susfs_log.to_string()),
             "brene.hide_sus_mounts" => Some(self.brene.hide_sus_mounts.to_string()),
@@ -583,7 +579,6 @@ impl ZeroMountConfig {
             }
             "brene.auto_hide_recovery" => self.brene.auto_hide_recovery = value.parse()?,
             "brene.auto_hide_tmp" => self.brene.auto_hide_tmp = value.parse()?,
-            "brene.auto_hide_sdcard_data" => self.brene.auto_hide_sdcard_data = value.parse()?,
             "brene.avc_log_spoofing" => self.brene.avc_log_spoofing = value.parse()?,
             "brene.susfs_log" => self.brene.susfs_log = value.parse()?,
             "brene.hide_sus_mounts" => self.brene.hide_sus_mounts = value.parse()?,
@@ -770,7 +765,6 @@ mod tests {
         assert!(config.brene.auto_hide_rooted_folders);
         assert!(config.brene.auto_hide_recovery);
         assert!(config.brene.auto_hide_tmp);
-        assert!(config.brene.auto_hide_sdcard_data);
         assert!(config.brene.avc_log_spoofing);
         assert!(!config.brene.susfs_log);
         assert!(config.brene.hide_sus_mounts);

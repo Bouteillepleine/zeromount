@@ -157,7 +157,7 @@ pub fn config_to_keys(config: &ZeroMountConfig) -> HashMap<String, String> {
     m.insert("hide_custom_recovery_folders".into(), translate::bool_to_int(config.brene.auto_hide_recovery).to_string());
     m.insert("hide_data_local_tmp".into(), translate::bool_to_int(config.brene.auto_hide_tmp).to_string());
     m.insert("hide_rooted_app_folders".into(), translate::bool_to_int(config.brene.auto_hide_rooted_folders).to_string());
-    m.insert("hide_sdcard_android_data".into(), translate::bool_to_int(config.brene.auto_hide_sdcard_data).to_string());
+    m.insert("hide_sdcard_android_data".into(), translate::bool_to_int(config.brene.emulate_vold_app_data).to_string());
     m.insert("hide_sus_mnts_for_non_su_procs".into(), translate::bool_to_int(config.brene.hide_sus_mounts).to_string());
     m.insert("kernel_umount".into(), translate::bool_to_int(config.brene.kernel_umount).to_string());
 
@@ -219,8 +219,8 @@ pub fn apply_keys_to_config(keys: &HashMap<String, String>, config: &mut ZeroMou
 
     if let Some(v) = keys.get("hide_sdcard_android_data") {
         let val = translate::int_to_bool(v.parse().unwrap_or(0));
-        if config.brene.auto_hide_sdcard_data != val {
-            config.brene.auto_hide_sdcard_data = val;
+        if config.brene.emulate_vold_app_data != val {
+            config.brene.emulate_vold_app_data = val;
             changed = true;
         }
     }
@@ -358,7 +358,6 @@ mod tests {
         c.brene.auto_hide_recovery = true;
         c.brene.auto_hide_tmp = true;
         c.brene.auto_hide_rooted_folders = true;
-        c.brene.auto_hide_sdcard_data = true;
         c.brene.hide_sus_mounts = true;
         c.brene.kernel_umount = true;
         c.brene.auto_hide_zygisk = true;

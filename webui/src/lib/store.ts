@@ -105,7 +105,6 @@ function createAppStore() {
     auto_hide_rooted_folders: true,
     auto_hide_recovery: true,
     auto_hide_tmp: true,
-    auto_hide_sdcard_data: true,
     avc_log_spoofing: true,
     susfs_log: false,
     hide_sus_mounts: true,
@@ -720,7 +719,7 @@ function createAppStore() {
     const breneKeys: (keyof BreneSettings)[] = [
       'auto_hide_apk', 'auto_hide_zygisk', 'auto_hide_fonts',
       'auto_hide_rooted_folders', 'auto_hide_recovery', 'auto_hide_tmp',
-      'auto_hide_sdcard_data', 'avc_log_spoofing', 'susfs_log',
+      'avc_log_spoofing', 'susfs_log',
       'hide_sus_mounts', 'emulate_vold_app_data', 'force_hide_lsposed',
       'spoof_cmdline', 'hide_ksu_loops', 'kernel_umount', 'prop_spoofing', 'auto_hide_injections',
     ];
