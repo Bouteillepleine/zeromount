@@ -407,6 +407,21 @@ pub fn handle_cleanup_stale() -> Result<()> {
     }
 }
 
+pub fn handle_vold_app_data() -> Result<()> {
+    let config = crate::core::config::ZeroMountConfig::load(None)?;
+    if !config.brene.emulate_vold_app_data {
+        tracing::info!("vold_app_data: disabled in config, skipping");
+        return Ok(());
+    }
+    let Ok(client) = crate::susfs::SusfsClient::probe() else {
+        tracing::warn!("vold_app_data: SUSFS unavailable");
+        return Ok(());
+    };
+    let count = crate::susfs::brene::apply_vold_app_data(&client)?;
+    tracing::info!("vold_app_data: {count} paths hidden");
+    Ok(())
+}
+
 pub fn handle_emoji(action: EmojiAction) -> Result<()> {
     match action {
         EmojiAction::ApplyApps => {

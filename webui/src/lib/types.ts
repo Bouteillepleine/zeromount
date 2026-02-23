@@ -127,7 +127,6 @@ export interface BreneSettings {
   hide_ksu_loops: boolean;
   prop_spoofing: boolean;
   auto_hide_injections: boolean;
-  kernel_umount: boolean;
   verified_boot_hash: string;
 }
 

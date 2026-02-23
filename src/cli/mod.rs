@@ -71,6 +71,9 @@ pub enum Commands {
         #[command(subcommand)]
         action: EmojiAction,
     },
+    /// Vold app data emulation (post-boot only — needs pm)
+    #[command(name = "vold-app-data")]
+    VoldAppData,
     /// Print version
     Version,
 }

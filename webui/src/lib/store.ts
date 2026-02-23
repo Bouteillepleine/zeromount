@@ -113,7 +113,6 @@ function createAppStore() {
     hide_ksu_loops: true,
     prop_spoofing: true,
     auto_hide_injections: true,
-    kernel_umount: true,
     verified_boot_hash: '',
   };
 
@@ -702,7 +701,6 @@ function createAppStore() {
       'auto_hide_sdcard_data', 'avc_log_spoofing', 'susfs_log',
       'hide_sus_mounts', 'emulate_vold_app_data', 'force_hide_lsposed',
       'spoof_cmdline', 'hide_ksu_loops', 'prop_spoofing', 'auto_hide_injections',
-      'kernel_umount',
     ];
 
     if (dump?.brene && dump?.uname) {

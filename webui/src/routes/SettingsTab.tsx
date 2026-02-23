@@ -523,24 +523,15 @@ export function SettingsTab() {
               <path d="M7 10l5 5 5-5z"/>
             </svg>
             <span>Advanced Settings</span>
-            <span class="settings__advanced-badge">15</span>
+            <span class="settings__advanced-badge">14</span>
           </button>
 
           <Show when={showAdvanced()}>
             <div class="settings__advanced-content">
               <CollapsibleSubgroup
                 label="SUSFS Control"
-                hiddenCount={7}
+                hiddenCount={5}
                 defaultItems={
-                  <div class="settings__item">
-                    <div class="settings__item-content">
-                      <div class="settings__item-label">Kernel Umount</div>
-                      <div class="settings__item-desc">KSU automatic overlay umount for app namespaces</div>
-                    </div>
-                    <Toggle checked={store.settings.brene.kernel_umount} onChange={(v) => handleBreneToggle('kernel_umount', v)} />
-                  </div>
-                }
-                expandedItems={<>
                   <div class="settings__item">
                     <div class="settings__item-content">
                       <div class="settings__item-label">Emulate Vold App Data</div>
@@ -548,6 +539,8 @@ export function SettingsTab() {
                     </div>
                     <Toggle checked={store.settings.brene.emulate_vold_app_data} onChange={(v) => handleBreneToggle('emulate_vold_app_data', v)} />
                   </div>
+                }
+                expandedItems={<>
                   <div class="settings__item">
                     <div class="settings__item-content">
                       <div class="settings__item-label">Force Hide LSPosed</div>

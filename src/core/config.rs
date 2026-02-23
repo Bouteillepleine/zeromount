@@ -184,12 +184,12 @@ pub struct BreneConfig {
     pub custom_sus_maps: Vec<String>,
     #[serde(default)]
     pub custom_sus_path_loops: Vec<String>,
-    #[serde(default = "default_true")]
-    pub kernel_umount: bool,
     #[serde(default)]
     pub verified_boot_hash: String,
     #[serde(default = "default_vbmeta_size")]
     pub vbmeta_size: u32,
+    #[serde(default = "default_true")]
+    pub emulate_vold_app_data: bool,
 }
 
 impl Default for BreneConfig {
@@ -213,9 +213,9 @@ impl Default for BreneConfig {
             custom_sus_paths: Vec::new(),
             custom_sus_maps: Vec::new(),
             custom_sus_path_loops: Vec::new(),
-            kernel_umount: true,
             verified_boot_hash: String::new(),
             vbmeta_size: default_vbmeta_size(),
+            emulate_vold_app_data: true,
         }
     }
 }
@@ -521,9 +521,9 @@ impl ZeroMountConfig {
             "brene.custom_sus_paths" => Some(self.brene.custom_sus_paths.join(",")),
             "brene.custom_sus_maps" => Some(self.brene.custom_sus_maps.join(",")),
             "brene.custom_sus_path_loops" => Some(self.brene.custom_sus_path_loops.join(",")),
-            "brene.kernel_umount" => Some(self.brene.kernel_umount.to_string()),
             "brene.verified_boot_hash" => Some(self.brene.verified_boot_hash.clone()),
             "brene.vbmeta_size" => Some(self.brene.vbmeta_size.to_string()),
+            "brene.emulate_vold_app_data" => Some(self.brene.emulate_vold_app_data.to_string()),
 
             // uname.*
             "uname.mode" => Some(uname_mode_str(self.uname.mode).to_string()),
@@ -592,9 +592,9 @@ impl ZeroMountConfig {
             "brene.custom_sus_paths" => self.brene.custom_sus_paths = parse_csv(value),
             "brene.custom_sus_maps" => self.brene.custom_sus_maps = parse_csv(value),
             "brene.custom_sus_path_loops" => self.brene.custom_sus_path_loops = parse_csv(value),
-            "brene.kernel_umount" => self.brene.kernel_umount = value.parse()?,
             "brene.verified_boot_hash" => self.brene.verified_boot_hash = value.to_string(),
             "brene.vbmeta_size" => self.brene.vbmeta_size = value.parse()?,
+            "brene.emulate_vold_app_data" => self.brene.emulate_vold_app_data = value.parse()?,
 
             // uname.*
             "uname.mode" => self.uname.mode = parse_uname_mode(value)?,
@@ -773,6 +773,7 @@ mod tests {
         assert!(!config.brene.spoof_cmdline);
         assert!(config.brene.hide_ksu_loops);
         assert!(config.brene.auto_hide_injections);
+        assert!(config.brene.emulate_vold_app_data);
         assert_eq!(config.uname.mode, UnameMode::Disabled);
         assert!(!config.perf.enabled);
         assert!(!config.emoji.enabled);

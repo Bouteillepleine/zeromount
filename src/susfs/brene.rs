@@ -483,8 +483,7 @@ fn walk_system_dir_hide_dotfiles(client: &SusfsClient, dir: &Path) -> u32 {
 }
 
 /// Scan /data/adb/modules/ for font modules. Bind-mount each font file
-/// (kernel_umount=false keeps mounts in app namespaces, hide_sus_mounts
-/// covers the traces), then layer SUSFS redirect + kstat on top.
+/// (hide_sus_mounts covers the traces), then layer SUSFS redirect + kstat on top.
 fn process_font_modules(client: &SusfsClient, overlay_source: &str) -> Vec<FontModuleInfo> {
     let modules_dir = Path::new(MODULES_DIR);
     if !modules_dir.is_dir() {
@@ -823,6 +822,38 @@ fn hide_sdcard_recovery_folders(client: &SusfsClient) -> Result<u32> {
     if std::path::Path::new(twrp_alt).exists() {
         if client.add_sus_path(twrp_alt).is_ok() { count += 1; }
         let _ = client.add_sus_path_loop(twrp_alt);
+    }
+
+    Ok(count)
+}
+
+/// Hide /sdcard/Android/data/<pkg> for each third-party app via sus_path.
+/// Mirrors susfs4ksu-module boot-completed.sh:74-79.
+/// Must run post-boot (needs pm; called via `zeromount vold-app-data` from boot-completed.sh).
+pub fn apply_vold_app_data(client: &SusfsClient) -> Result<u32> {
+    if !client.is_available() || !client.features().path {
+        return Ok(0);
+    }
+
+    let output = Command::new("pm")
+        .args(["list", "packages", "-3"])
+        .output()?;
+
+    let mut count = 0u32;
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let pkg = match line.strip_prefix("package:") {
+            Some(p) => p.trim(),
+            None => continue,
+        };
+        if pkg.is_empty() {
+            continue;
+        }
+
+        let sdcard = format!("/sdcard/Android/data/{pkg}");
+        let emulated = format!("/storage/emulated/0/Android/data/{pkg}");
+
+        if client.add_sus_path(&sdcard).is_ok() { count += 1; }
+        if client.add_sus_path(&emulated).is_ok() { count += 1; }
     }
 
     Ok(count)
