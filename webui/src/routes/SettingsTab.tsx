@@ -503,6 +503,7 @@ export function SettingsTab() {
               }
             }}
             disabled={!susfsAvailable()}
+            variant="rainbow"
           />
         </div>
 
@@ -551,16 +552,6 @@ export function SettingsTab() {
                 <div class="settings__item-desc">Hide module entries from /proc/maps</div>
               </div>
               <Toggle checked={store.settings.susfs.maps_hide} onChange={(v) => handleSusfsToggle('maps_hide', v)} disabled={susfsDisabled()} />
-            </div>
-            <div class={`settings__item settings__item--sub${susfsDisabled() ? ' settings__item--disabled' : ''}${susfsItemClass()}`}>
-              <div class="settings__item-content">
-                <div class="settings__item-label">Font Redirect</div>
-                <div class="settings__item-desc">Redirect font files via open_redirect</div>
-                <Show when={!susfsAvailable()}>
-                  <div class="settings__susfs-hint">Requires SUSFS kernel support</div>
-                </Show>
-              </div>
-              <Toggle checked={store.settings.susfs.open_redirect} onChange={(v) => handleSusfsToggle('open_redirect', v)} disabled={susfsDisabled()} />
             </div>
           </div>
 

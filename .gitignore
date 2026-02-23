@@ -30,6 +30,7 @@ build/
 node_modules/
 .gradle/
 *.apk
+*.zip
 
 # IDE
 .idea/
@@ -51,15 +52,21 @@ zeromount/
 
 # Release artifacts
 release/
-*.zip
 
 # Documentation (project-internal, not shipped)
 docs/
 CLAUDE.md
 
-# WebUI build dependencies (source tracked, node_modules excluded)
+# WebUI source deps + lockfile (rebuilt from package.json)
 webui/node_modules/
+webui/package-lock.json
 
-# Compiled binaries (built via CI)
-module/bin/*/zeromount
-module/bin/*/aapt
+# WebUI build output (rebuilt by vite build)
+module/webroot/
+
+# Compiled binaries (rebuilt by package.sh)
+module/bin/
+module/zeromount
+
+# External tools (not part of core project)
+tools/

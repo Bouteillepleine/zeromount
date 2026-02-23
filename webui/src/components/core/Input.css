@@ -31,7 +31,7 @@
 .input__field:focus {
   border-color: transparent;
   background:
-    linear-gradient(var(--bg-surface), var(--bg-surface)) padding-box,
+    linear-gradient(rgb(var(--bg-base, 15, 15, 26)), rgb(var(--bg-base, 15, 15, 26))) padding-box,
     var(--gradient-primary) border-box;
   box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.2);
 }

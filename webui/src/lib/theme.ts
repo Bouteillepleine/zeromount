@@ -208,6 +208,7 @@ export function applyTheme(themeObj: typeof darkTheme, accentColor?: string) {
   root.style.setProperty('--accent-rgb', accentStyles.rgb);
   root.style.setProperty('--text-on-accent', accentStyles.textOnAccent);
   root.style.setProperty('--shadow-glow', `0 0 20px rgba(${accentStyles.rgb}, 0.3)`);
+  root.style.setProperty('--bg-base', themeObj.bgBase);
 }
 
 // Apply only accent changes (for when just the accent color changes)

@@ -114,3 +114,43 @@
     outline: 2px solid var(--text-accent, #00D68F);
     outline-offset: 2px;
 }
+
+/* Rainbow variant for master SUSFS toggle */
+@keyframes rainbowShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.toggle-track--rainbow.toggle-track--active {
+    background: linear-gradient(
+        135deg,
+        #FF6B6B 0%,
+        #FF8E53 16%,
+        #FFC107 32%,
+        #00D68F 48%,
+        #00B4D8 64%,
+        #6366F1 80%,
+        #D946EF 100%
+    );
+    background-size: 200% 200%;
+    animation: rainbowShift 4s ease infinite;
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow:
+        0 0 16px rgba(255, 107, 107, 0.25),
+        0 0 16px rgba(0, 214, 143, 0.15),
+        inset 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+.toggle-track--rainbow.toggle-track--active .toggle-thumb::after {
+    background: linear-gradient(135deg, #FF6B6B, #00D68F);
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
+}
+
+.custom-toggle:hover .toggle-track--rainbow.toggle-track--active {
+    filter: brightness(1.15);
+    box-shadow:
+        0 0 24px rgba(255, 107, 107, 0.35),
+        0 0 24px rgba(0, 214, 143, 0.2),
+        inset 0 0 10px rgba(255, 255, 255, 0.1);
+}

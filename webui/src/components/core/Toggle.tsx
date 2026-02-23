@@ -4,6 +4,7 @@ interface ToggleProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
+  variant?: 'default' | 'rainbow';
 }
 
 export function Toggle(props: ToggleProps) {
@@ -26,7 +27,7 @@ export function Toggle(props: ToggleProps) {
         }
       }}
     >
-      <div class={`toggle-track${props.checked ? ' toggle-track--active' : ''}`}>
+      <div class={`toggle-track${props.checked ? ' toggle-track--active' : ''}${props.variant === 'rainbow' ? ' toggle-track--rainbow' : ''}`}>
         <div class="toggle-thumb" />
       </div>
     </div>
