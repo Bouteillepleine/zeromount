@@ -490,6 +490,13 @@ export function SettingsTab() {
           <div class="settings__sub-toggles">
             <div class={`settings__item settings__item--sub${!susfsEnabled() ? ' settings__item--disabled' : ''}`}>
               <div class="settings__item-content">
+                <div class="settings__item-label">Hide Sus Mounts</div>
+                <div class="settings__item-desc">Hide module mounts from non-root processes</div>
+              </div>
+              <Toggle checked={store.settings.brene.hide_sus_mounts} onChange={(v) => handleBreneToggle('hide_sus_mounts', v)} disabled={!susfsEnabled()} />
+            </div>
+            <div class={`settings__item settings__item--sub${!susfsEnabled() ? ' settings__item--disabled' : ''}`}>
+              <div class="settings__item-content">
                 <div class="settings__item-label">Path Hiding</div>
                 <div class="settings__item-desc">Hide paths from detection apps</div>
               </div>
@@ -509,13 +516,6 @@ export function SettingsTab() {
               </div>
               <Toggle checked={store.settings.susfs.maps_hide} onChange={(v) => handleSusfsToggle('maps_hide', v)} disabled={!susfsEnabled()} />
             </div>
-            <div class={`settings__item settings__item--sub${!susfsEnabled() ? ' settings__item--disabled' : ''}`}>
-              <div class="settings__item-content">
-                <div class="settings__item-label">Font Redirect</div>
-                <div class="settings__item-desc">Redirect font files via open_redirect</div>
-              </div>
-              <Toggle checked={store.settings.susfs.open_redirect} onChange={(v) => handleSusfsToggle('open_redirect', v)} disabled={!susfsEnabled()} />
-            </div>
           </div>
 
           <button class={`settings__advanced-toggle${showAdvanced() ? ' settings__advanced-toggle--open' : ''}`} onClick={() => setShowAdvanced(!showAdvanced())}>
@@ -523,7 +523,7 @@ export function SettingsTab() {
               <path d="M7 10l5 5 5-5z"/>
             </svg>
             <span>Advanced Settings</span>
-            <span class="settings__advanced-badge">16</span>
+            <span class="settings__advanced-badge">15</span>
           </button>
 
           <Show when={showAdvanced()}>
@@ -554,13 +554,6 @@ export function SettingsTab() {
                       <div class="settings__item-desc">Unmount dex2oat paths to hide LSPosed injection</div>
                     </div>
                     <Toggle checked={store.settings.brene.force_hide_lsposed} onChange={(v) => handleBreneToggle('force_hide_lsposed', v)} />
-                  </div>
-                  <div class="settings__item">
-                    <div class="settings__item-content">
-                      <div class="settings__item-label">Hide Sus Mounts</div>
-                      <div class="settings__item-desc">Hide module mounts from non-root processes</div>
-                    </div>
-                    <Toggle checked={store.settings.brene.hide_sus_mounts} onChange={(v) => handleBreneToggle('hide_sus_mounts', v)} />
                   </div>
                   <div class="settings__item">
                     <div class="settings__item-content">
