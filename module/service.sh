@@ -51,7 +51,9 @@ spoof_props() {
     set_prop ro.boot.realmebootstate green
     set_prop ro.boot.verifiedbooterror ""
     set_prop ro.boot.veritymode.managed yes
-    set_prop ro.boot.vbmeta.size 4096
+    VBS=$("$BIN" config get brene.vbmeta_size 2>/dev/null)
+    [ -z "$VBS" ] && VBS=4096
+    set_prop ro.boot.vbmeta.size "$VBS"
     set_prop ro.boot.vbmeta.hash_alg sha256
     set_prop ro.boot.vbmeta.avb_version 1.3
     set_prop ro.boot.vbmeta.invalidate_on_error yes

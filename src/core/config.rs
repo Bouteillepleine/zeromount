@@ -188,6 +188,8 @@ pub struct BreneConfig {
     pub kernel_umount: bool,
     #[serde(default)]
     pub verified_boot_hash: String,
+    #[serde(default = "default_vbmeta_size")]
+    pub vbmeta_size: u32,
 }
 
 impl Default for BreneConfig {
@@ -213,6 +215,7 @@ impl Default for BreneConfig {
             custom_sus_path_loops: Vec::new(),
             kernel_umount: true,
             verified_boot_hash: String::new(),
+            vbmeta_size: default_vbmeta_size(),
         }
     }
 }
@@ -355,6 +358,10 @@ fn default_true() -> bool {
 
 fn default_auto() -> String {
     "auto".to_string()
+}
+
+fn default_vbmeta_size() -> u32 {
+    4096
 }
 
 // -- 3-layer resolution --
@@ -516,6 +523,7 @@ impl ZeroMountConfig {
             "brene.custom_sus_path_loops" => Some(self.brene.custom_sus_path_loops.join(",")),
             "brene.kernel_umount" => Some(self.brene.kernel_umount.to_string()),
             "brene.verified_boot_hash" => Some(self.brene.verified_boot_hash.clone()),
+            "brene.vbmeta_size" => Some(self.brene.vbmeta_size.to_string()),
 
             // uname.*
             "uname.mode" => Some(uname_mode_str(self.uname.mode).to_string()),
@@ -586,6 +594,7 @@ impl ZeroMountConfig {
             "brene.custom_sus_path_loops" => self.brene.custom_sus_path_loops = parse_csv(value),
             "brene.kernel_umount" => self.brene.kernel_umount = value.parse()?,
             "brene.verified_boot_hash" => self.brene.verified_boot_hash = value.to_string(),
+            "brene.vbmeta_size" => self.brene.vbmeta_size = value.parse()?,
 
             // uname.*
             "uname.mode" => self.uname.mode = parse_uname_mode(value)?,
