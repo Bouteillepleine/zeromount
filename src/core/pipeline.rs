@@ -286,7 +286,7 @@ impl MountController<Planned> {
             None
         };
 
-        let executor = crate::vfs::VfsExecutor::new(driver, susfs, config.susfs.clone());
+        let executor = crate::vfs::VfsExecutor::new(driver, susfs);
         executor.execute(plan, modules)
     }
 
@@ -436,7 +436,7 @@ impl MountController<Mounted> {
                 });
 
                 let susfs_mode = self.state.detection.capabilities.susfs_mode;
-                match crate::susfs::brene::apply_brene(&client, &self.state.config, true, fonts_overlay_mounted, susfs_mode, external_module) {
+                match crate::susfs::brene::apply_brene(&client, &self.state.config, fonts_overlay_mounted, susfs_mode, external_module) {
                     Ok(brene) => {
                         debug!(
                             paths = brene.paths_hidden,

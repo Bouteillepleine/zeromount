@@ -3,31 +3,21 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use tracing::{debug, info};
 
-use crate::core::config::SusfsConfig;
 use crate::core::types::{
     ModuleFileType, MountPlan, MountResult, MountStrategy, ScannedModule,
 };
-use crate::susfs::kstat::apply_kstat_redirect_or_static;
 use crate::susfs::SusfsClient;
 
 use super::VfsDriver;
 
-/// VFS mount executor -- injects rules, applies SUSFS protections, enables engine.
-///
-/// Pipeline ordering (fixes BUG-M3 / CO03):
-///   1. INJECT  -- add_rule for each module file
-///   2. SUSFS   -- kstat spoof + path hide per injected file
-///   3. ENABLE  -- activate the VFS engine
-///   4. REFRESH -- force dcache update
 pub struct VfsExecutor {
     driver: VfsDriver,
     susfs: Option<SusfsClient>,
-    susfs_config: SusfsConfig,
 }
 
 impl VfsExecutor {
-    pub fn new(driver: VfsDriver, susfs: Option<SusfsClient>, susfs_config: SusfsConfig) -> Self {
-        Self { driver, susfs, susfs_config }
+    pub fn new(driver: VfsDriver, susfs: Option<SusfsClient>) -> Self {
+        Self { driver, susfs }
     }
 
     /// Execute the full VFS pipeline for a set of scanned modules.
@@ -184,14 +174,8 @@ impl VfsExecutor {
         }
     }
 
-    /// Apply SUSFS protections for a module's injected files.
-    /// Phase 2: kstat + path hiding for module files.
-    fn apply_susfs_protections(&self, susfs: &SusfsClient, module: &ScannedModule) {
-        apply_module_susfs_protections(susfs, module, Some(&self.susfs_config), false, true);
-    }
 }
 
-// BRENE owns font/emoji/audio via open_redirect_all (zero mount fingerprint)
 const BRENE_OWNED_TARGET_PREFIXES: &[&str] = &["/system/fonts/"];
 
 pub(crate) fn is_brene_owned_target(target: &Path) -> bool {
@@ -202,84 +186,6 @@ pub(crate) fn is_brene_owned_target(target: &Path) -> bool {
     BRENE_OWNED_TARGET_PREFIXES
         .iter()
         .any(|prefix| s.starts_with(prefix) || s == &prefix[..prefix.len() - 1])
-}
-
-/// Apply SUSFS kstat spoofing + path hiding for a single module's files.
-pub fn apply_module_susfs_protections(
-    susfs: &SusfsClient,
-    module: &ScannedModule,
-    susfs_config: Option<&SusfsConfig>,
-    skip_kstat: bool,
-    skip_path_hide: bool,
-) {
-    let features = susfs.features();
-    let kstat_enabled = susfs_config.map_or(true, |c| c.kstat);
-    let path_hide_enabled = susfs_config.map_or(true, |c| c.path_hide);
-
-    if !skip_kstat && features.kstat && kstat_enabled {
-        for file in &module.files {
-            match file.file_type {
-                ModuleFileType::Regular
-                | ModuleFileType::Directory
-                | ModuleFileType::Symlink
-                | ModuleFileType::RedirectXattr => {}
-                _ => continue,
-            }
-
-            let source = module.path.join(&file.relative_path);
-            let target = match resolve_target_path(&file.relative_path) {
-                Some(t) => t,
-                None => continue,
-            };
-
-            if features.open_redirect && is_brene_owned_target(&target) {
-                continue;
-            }
-
-            let source_str = source.display().to_string();
-            let target_str = target.display().to_string();
-
-            if let Err(e) = apply_kstat_redirect_or_static(susfs, &target_str, &source_str) {
-                debug!(
-                    module = %module.id,
-                    target = %target_str,
-                    error = %e,
-                    "kstat spoofing failed"
-                );
-            }
-        }
-    }
-
-    // Pass 2: path hiding for directories only.
-    // add_sus_path on a directory implicitly hides all children in the kernel,
-    // so individual file hiding is redundant.
-    if !skip_path_hide && features.path && path_hide_enabled {
-        for file in &module.files {
-            if file.file_type != ModuleFileType::Directory {
-                continue;
-            }
-
-            let source = module.path.join(&file.relative_path);
-            let target = match resolve_target_path(&file.relative_path) {
-                Some(t) => t,
-                None => continue,
-            };
-
-            if features.open_redirect && is_brene_owned_target(&target) {
-                continue;
-            }
-
-            let source_str = source.display().to_string();
-            if let Err(e) = susfs.add_sus_path(&source_str) {
-                debug!(
-                    module = %module.id,
-                    path = %source_str,
-                    error = %e,
-                    "path hiding failed"
-                );
-            }
-        }
-    }
 }
 
 // On SAR (System-as-Root) Android, /system/vendor is a symlink to /vendor.
