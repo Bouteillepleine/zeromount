@@ -45,6 +45,8 @@ target/
 
 # Reference repos (not part of this project)
 susfs4ksu-new/
+susfs4ksu-module/
+BRENE/
 zeromount/
 
 # Release artifacts
