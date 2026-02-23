@@ -5,23 +5,23 @@
 #include <unistd.h>
 #include <plthook.h>
 
-#define LOG_TAG "[adbex][init]"
+#define LOG_TAG "[axon][init]"
 
 #define ADBD_PATH_APEX "/apex/com.android.adbd/bin/adbd"
 #define ADBD_PATH "/system/bin/adbd"
-#define ADBDEX_ADBD "/data/adb/adbex/libadbex_adbd.so"
+#define AXON_ADBD "/data/adb/axon/libaxon_adbd.so"
 
 int (*orig_execv)(const char* path, char* const argv[]);
 int hook_execv(const char* path, char* const argv[]) {
   if (unlikely(!strcmp(path, ADBD_PATH_APEX) || !strcmp(path, ADBD_PATH))) {
     klog(LOG_TAG, "adbd pid: %d\n", getpid());
-    setenv("LD_PRELOAD", ADBDEX_ADBD, 1);
+    setenv("LD_PRELOAD", AXON_ADBD, 1);
     return orig_execv(path, argv);
   }
   return orig_execv(path, argv);
 }
 
-CONSTRUCTOR UNUSED void adbex_init_main() {
+CONSTRUCTOR UNUSED void axon_init_main() {
   klog(LOG_TAG, "injected into init");
 
   plthook_t* plthook;

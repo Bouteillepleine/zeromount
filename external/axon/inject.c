@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 
-#define LOG_TAG "[adbex][inject]"
+#define LOG_TAG "[axon][inject]"
 
 uintptr_t reg_stack_alloc(struct user_regs_struct* regs, size_t size) {
   size = ALIGN_UP(size, sizeof(long));

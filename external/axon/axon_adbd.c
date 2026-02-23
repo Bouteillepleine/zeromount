@@ -9,7 +9,7 @@
 #include <dlfcn.h>
 #include <sys/system_properties.h>
 
-#define LOG_TAG "[adbex][adbd]"
+#define LOG_TAG "[axon][adbd]"
 
 EXPORT int __android_log_is_debuggable() { return 1; }
 
@@ -167,7 +167,7 @@ EXPORT int execle(UNUSED const char* path, const char* arg0, ...) {
   return ret;
 }
 
-CONSTRUCTOR UNUSED void adbex_adbd_main() {
+CONSTRUCTOR UNUSED void axon_adbd_main() {
   klog(LOG_TAG, "injected into adbd (pid=%d)", getpid());
   unsetenv("LD_PRELOAD");
 

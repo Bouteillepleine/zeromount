@@ -161,12 +161,12 @@ fi
 
 rm -rf "$MODPATH/webroot/webroot" 2>/dev/null
 
-# Stage adbex libraries
+# Stage axon libraries
 if [ -d "$MODPATH/lib/${ABI}" ]; then
     chmod 644 "$MODPATH/lib/${ABI}"/*.so 2>/dev/null
 fi
-if [ -f "$MODPATH/bin/${ABI}/adbex_inject" ]; then
-    chmod 755 "$MODPATH/bin/${ABI}/adbex_inject"
+if [ -f "$MODPATH/bin/${ABI}/axon_inject" ]; then
+    chmod 755 "$MODPATH/bin/${ABI}/axon_inject"
 fi
 
 set_perm_recursive "$MODPATH/bin" 0 0 0755 0755

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22.1)
 include(ndk.cmake)
-project(adbex C)
+project(axon C)
 
 # LTO
 cmake_policy(SET CMP0069 NEW)
@@ -24,12 +24,12 @@ set(PLTHOOK_SRC ${PLTHOOK_PATH}/plthook_elf.c)
 add_library(plthook STATIC ${PLTHOOK_SRC})
 target_include_directories(plthook SYSTEM PUBLIC ${PLTHOOK_PATH})
 
-# adbex
+# axon
 add_executable(inject inject.c ptrace.c utils.c)
 target_link_libraries(inject)
 
-add_library(adbex_init SHARED adbex_init.c utils.c)
-target_link_libraries(adbex_init plthook)
+add_library(axon_init SHARED axon_init.c utils.c)
+target_link_libraries(axon_init plthook)
 
-add_library(adbex_adbd SHARED adbex_adbd.c utils.c)
-target_link_libraries(adbex_adbd)
+add_library(axon_adbd SHARED axon_adbd.c utils.c)
+target_link_libraries(axon_adbd)

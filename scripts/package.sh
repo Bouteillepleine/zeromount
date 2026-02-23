@@ -110,15 +110,15 @@ build_rust() {
     echo "==> [$profile] All Rust targets built"
 }
 
-build_adbex() {
-    local adbex_src="${ADBEX_SRC:-$PROJECT_ROOT/external/adbex}"
-    if [ ! -f "$adbex_src/inject.c" ]; then
-        echo "WARN: adbex source not found at $adbex_src, skipping" >&2
+build_axon() {
+    local axon_src="${AXON_SRC:-$PROJECT_ROOT/external/axon}"
+    if [ ! -f "$axon_src/inject.c" ]; then
+        echo "WARN: axon source not found at $axon_src, skipping" >&2
         return 0
     fi
 
     local api=23
-    local build_dir="$PROJECT_ROOT/target/adbex"
+    local build_dir="$PROJECT_ROOT/target/axon"
 
     # ptrace.h only supports aarch64 + x86_64 — ARM32/x86 hit #error
     declare -A CLANG_TARGET=(
@@ -137,34 +137,34 @@ build_adbex() {
             continue
         fi
 
-        echo "==> [adbex] Building $abi"
+        echo "==> [axon] Building $abi"
         mkdir -p "$out"
 
         local cflags="-fvisibility=hidden -Os -DANDROID"
 
-        "$cc" $cflags -c "$adbex_src/external/plthook/plthook_elf.c" \
-            -I"$adbex_src/external/plthook" -o "$out/plthook_elf.o"
+        "$cc" $cflags -c "$axon_src/external/plthook/plthook_elf.c" \
+            -I"$axon_src/external/plthook" -o "$out/plthook_elf.o"
         "$ar" rcs "$out/libplthook.a" "$out/plthook_elf.o"
 
         "$cc" $cflags -s \
-            "$adbex_src/inject.c" "$adbex_src/ptrace.c" "$adbex_src/utils.c" \
-            -o "$out/adbex_inject"
+            "$axon_src/inject.c" "$axon_src/ptrace.c" "$axon_src/utils.c" \
+            -o "$out/axon_inject"
 
         "$cc" $cflags -shared -s \
-            "$adbex_src/adbex_init.c" "$adbex_src/utils.c" \
-            -I"$adbex_src/external/plthook" -L"$out" -lplthook \
-            -o "$out/libadbex_init.so"
+            "$axon_src/axon_init.c" "$axon_src/utils.c" \
+            -I"$axon_src/external/plthook" -L"$out" -lplthook \
+            -o "$out/libaxon_init.so"
 
         "$cc" $cflags -shared -s \
-            "$adbex_src/adbex_adbd.c" "$adbex_src/utils.c" \
-            -ldl -o "$out/libadbex_adbd.so"
+            "$axon_src/axon_adbd.c" "$axon_src/utils.c" \
+            -ldl -o "$out/libaxon_adbd.so"
 
         mkdir -p "$MODULE_DIR/bin/$abi" "$MODULE_DIR/lib/$abi"
-        cp "$out/adbex_inject" "$MODULE_DIR/bin/$abi/"
-        cp "$out/libadbex_init.so" "$MODULE_DIR/lib/$abi/"
-        cp "$out/libadbex_adbd.so" "$MODULE_DIR/lib/$abi/"
+        cp "$out/axon_inject" "$MODULE_DIR/bin/$abi/"
+        cp "$out/libaxon_init.so" "$MODULE_DIR/lib/$abi/"
+        cp "$out/libaxon_adbd.so" "$MODULE_DIR/lib/$abi/"
     done
-    echo "==> [adbex] All targets built"
+    echo "==> [axon] All targets built"
 }
 
 # Package one ZIP from a given Rust profile
@@ -229,13 +229,13 @@ package_zip() {
             cp "$MODULE_DIR/bin/$abi/aapt" "$staging/bin/$abi/aapt"
         fi
 
-        # adbex prebuilt staging (binaries present when available)
-        if [ -f "$MODULE_DIR/bin/$abi/adbex_inject" ]; then
-            cp "$MODULE_DIR/bin/$abi/adbex_inject" "$staging/bin/$abi/adbex_inject"
+        # axon prebuilt staging (binaries present when available)
+        if [ -f "$MODULE_DIR/bin/$abi/axon_inject" ]; then
+            cp "$MODULE_DIR/bin/$abi/axon_inject" "$staging/bin/$abi/axon_inject"
         fi
         if [ -d "$MODULE_DIR/lib/$abi" ]; then
             mkdir -p "$staging/lib/$abi"
-            for so in "$MODULE_DIR/lib/$abi"/libadbex_init.so "$MODULE_DIR/lib/$abi"/libadbex_adbd.so; do
+            for so in "$MODULE_DIR/lib/$abi"/libaxon_init.so "$MODULE_DIR/lib/$abi"/libaxon_adbd.so; do
                 [ -f "$so" ] && cp "$so" "$staging/lib/$abi/"
             done
         fi
@@ -334,7 +334,7 @@ if [ "$BUILD" = true ]; then
     build_rust "debug"
     build_rust "release"
 
-    build_adbex
+    build_axon
 
     if [ -f "$WEBUI_DIR/package.json" ]; then
         echo "==> Building WebUI"
