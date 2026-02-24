@@ -100,62 +100,6 @@ impl SusfsClient {
         }
     }
 
-    /// Initialize SUSFS root paths so add_sus_path doesn't EINVAL.
-    ///
-    /// The kernel's susfs_add_sus_path() uses strstr(path, android_data_path)
-    /// to classify paths. When android_data_path is uninitialized (empty),
-    /// strstr returns non-NULL for any input, hitting the is_inited=false
-    /// branch and returning EINVAL for every path.
-    pub fn ensure_root_paths(&self) {
-        let data_candidates = [
-            "/sdcard/Android/data",
-            "/storage/emulated/0/Android/data",
-            "/data/media/0/Android/data",
-        ];
-        let mut data_set = false;
-        for candidate in &data_candidates {
-            if Path::new(candidate).exists() {
-                match self.set_android_data_root_path(candidate) {
-                    Ok(()) => {
-                        debug!("android_data_root_path set to {candidate}");
-                        data_set = true;
-                        break;
-                    }
-                    Err(e) => {
-                        debug!("set_android_data_root_path({candidate}) failed: {e}");
-                    }
-                }
-            }
-        }
-        if !data_set {
-            debug!("no valid android_data_root_path candidate found");
-        }
-
-        let sdcard_candidates = [
-            "/sdcard",
-            "/storage/emulated/0",
-            "/data/media/0",
-        ];
-        let mut sdcard_set = false;
-        for candidate in &sdcard_candidates {
-            if Path::new(candidate).exists() {
-                match self.set_sdcard_root_path(candidate) {
-                    Ok(()) => {
-                        debug!("sdcard_root_path set to {candidate}");
-                        sdcard_set = true;
-                        break;
-                    }
-                    Err(e) => {
-                        debug!("set_sdcard_root_path({candidate}) failed: {e}");
-                    }
-                }
-            }
-        }
-        if !sdcard_set {
-            debug!("no valid sdcard_root_path candidate found");
-        }
-    }
-
     // ---- Query commands ----
 
     #[allow(dead_code)] // Public API for CLI/diag consumers
