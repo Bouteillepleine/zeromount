@@ -351,34 +351,35 @@ export function SettingsTab() {
           </div>
         </div>
 
-        {/* Storage + random paths only apply to overlay/magic — VFS uses kernel driver */}
         <Show when={store.effectiveStrategy() !== 'Vfs'}>
-          <div class="settings__group" style={{ "margin-top": "16px" }}>
-            <div class="settings__item-label">Storage Backend</div>
-            <div class="settings__item-desc" style={{ "margin-bottom": "10px" }}>
-              Filesystem for staging module content
-              {caps()?.tmpfs_xattr ? '' : ' (tmpfs lacks xattr — overlay whiteouts unavailable)'}
-            </div>
-            <ChipSelect
-              value={store.settings.mount.storage_mode}
-              onChange={(v) => store.setMountStorageMode(v as StorageMode)}
-              options={[
-                { value: 'auto', label: 'Auto' },
-                { value: 'erofs', label: 'EROFS', disabled: !caps()?.erofs_supported },
-                { value: 'tmpfs', label: 'tmpfs', disabled: !caps()?.tmpfs_xattr },
-                { value: 'ext4', label: 'ext4' },
-              ]}
-            />
-            <Show when={
-              store.resolvedStorageMode() &&
-              store.settings.mount.storage_mode !== 'auto' &&
-              store.resolvedStorageMode() !== store.settings.mount.storage_mode
-            }>
-              <div class="settings__item-desc" style={{ color: 'var(--warning)', "margin-top": "8px" }}>
-                {store.settings.mount.storage_mode} unavailable — resolved to {store.resolvedStorageMode()}
+          <Show when={store.effectiveStrategy() === 'Overlay'}>
+            <div class="settings__group" style={{ "margin-top": "16px" }}>
+              <div class="settings__item-label">Storage Backend</div>
+              <div class="settings__item-desc" style={{ "margin-bottom": "10px" }}>
+                Filesystem for staging module content
+                {caps()?.tmpfs_xattr ? '' : ' (tmpfs lacks xattr — overlay whiteouts unavailable)'}
               </div>
-            </Show>
-          </div>
+              <ChipSelect
+                value={store.settings.mount.storage_mode}
+                onChange={(v) => store.setMountStorageMode(v as StorageMode)}
+                options={[
+                  { value: 'auto', label: 'Auto' },
+                  { value: 'erofs', label: 'EROFS', disabled: !caps()?.erofs_supported },
+                  { value: 'tmpfs', label: 'tmpfs', disabled: !caps()?.tmpfs_xattr },
+                  { value: 'ext4', label: 'ext4' },
+                ]}
+              />
+              <Show when={
+                store.resolvedStorageMode() &&
+                store.settings.mount.storage_mode !== 'auto' &&
+                store.resolvedStorageMode() !== store.settings.mount.storage_mode
+              }>
+                <div class="settings__item-desc" style={{ color: 'var(--warning)', "margin-top": "8px" }}>
+                  {store.settings.mount.storage_mode} unavailable — resolved to {store.resolvedStorageMode()}
+                </div>
+              </Show>
+            </div>
+          </Show>
 
           <div class="settings__item">
             <div class="settings__item-content">
@@ -510,22 +511,6 @@ export function SettingsTab() {
         </div>
 
         <Show when={susfsAvailable()}>
-          <Show when={externalModule()}>
-            <div class="settings__external-notice">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--text-accent)">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-              </svg>
-              <span>
-                {ownership() === 'deferred_external'
-                  ? `SUSFS managed by ${externalModule()}`
-                  : `Syncing to ${externalModule()}`}
-              </span>
-              <span class="settings__configured-badge">
-                {ownership() === 'deferred_external' ? 'Deferred' : 'Syncing'}
-              </span>
-            </div>
-          </Show>
-
           <div class="settings__sub-toggles">
             <div class={`settings__item settings__item--sub${susfsDisabled() ? ' settings__item--disabled' : ''}${susfsItemClass()}`}>
               <div class="settings__item-content">
@@ -749,13 +734,13 @@ export function SettingsTab() {
         </div>
         <CollapsibleSubgroup
           label="Android Settings"
-          hiddenCount={3}
+          hiddenCount={4}
           defaultItems={<></>}
           expandedItems={<>
             <div class="settings__item">
               <div class="settings__item-content">
                 <div class="settings__item-label">Developer Options</div>
-                <div class="settings__item-desc">Show or hide developer options in system settings</div>
+                <div class="settings__item-desc">Default system settings toggle</div>
               </div>
               <Toggle
                 checked={store.settings.adb.developer_options}
@@ -768,7 +753,7 @@ export function SettingsTab() {
             <div class="settings__item">
               <div class="settings__item-content">
                 <div class="settings__item-label">USB Debugging</div>
-                <div class="settings__item-desc">Enable or disable USB debugging</div>
+                <div class="settings__item-desc">Default system settings toggle</div>
               </div>
               <Toggle
                 checked={store.settings.adb.usb_debugging}
@@ -781,11 +766,21 @@ export function SettingsTab() {
             <div class="settings__item">
               <div class="settings__item-content">
                 <div class="settings__item-label">ADB Root</div>
-                <div class="settings__item-desc">Run ADB as root for developers - requires reboot</div>
+                <div class="settings__item-desc">Run ADB as root without enabling the above two options (stealth) - requires reboot</div>
               </div>
               <Toggle
                 checked={store.settings.adb.adb_root}
                 onChange={(v) => store.setAdbToggle('adb_root', v)}
+              />
+            </div>
+            <div class="settings__item">
+              <div class="settings__item-content">
+                <div class="settings__item-label">Invisible Debugging</div>
+                <div class="settings__item-desc">Hide all debugging mode from prop level + libc hook - use with HMA-OSS for full coverage</div>
+              </div>
+              <Toggle
+                checked={store.settings.adb.invisible_debugging}
+                onChange={(v) => store.setAdbToggle('invisible_debugging', v)}
               />
             </div>
           </>}

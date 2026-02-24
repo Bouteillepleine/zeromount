@@ -307,6 +307,8 @@ pub struct AdbConfig {
     #[serde(default)]
     pub developer_options: bool,
     #[serde(default)]
+    pub invisible_debugging: bool,
+    #[serde(default)]
     pub adb_root: bool,
 }
 
@@ -315,6 +317,7 @@ impl Default for AdbConfig {
         Self {
             usb_debugging: false,
             developer_options: false,
+            invisible_debugging: false,
             adb_root: false,
         }
     }
@@ -547,6 +550,7 @@ impl ZeroMountConfig {
             "adb.usb_debugging" => Some(self.adb.usb_debugging.to_string()),
             "adb.hide_usb_debugging" => Some(self.adb.usb_debugging.to_string()),
             "adb.developer_options" => Some(self.adb.developer_options.to_string()),
+            "adb.invisible_debugging" => Some(self.adb.invisible_debugging.to_string()),
             "adb.adb_root" => Some(self.adb.adb_root.to_string()),
 
             // per_module.<id>.<field>
@@ -620,6 +624,7 @@ impl ZeroMountConfig {
             // adb.*
             "adb.usb_debugging" | "adb.hide_usb_debugging" => self.adb.usb_debugging = value.parse()?,
             "adb.developer_options" => self.adb.developer_options = value.parse()?,
+            "adb.invisible_debugging" => self.adb.invisible_debugging = value.parse()?,
             "adb.adb_root" => self.adb.adb_root = value.parse()?,
 
             // per_module.<id>.<field>
