@@ -194,19 +194,16 @@ function createAppStore() {
     };
   });
 
-  // Apply theme and accent color together
   createEffect(() => {
     applyTheme(currentTheme(), settings.accentColor);
   });
 
-  // Save theme preference to localStorage when it changes
   createEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('zeromount-theme', settings.theme);
     }
   });
 
-  // Save accent color to localStorage when it changes
   createEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('zeromount-accent', settings.accentColor);
@@ -251,11 +248,10 @@ function createAppStore() {
     return 'disabled';
   });
 
-  // Toast notifications
+
   const [toast, setToast] = createSignal<{ message: string; type: 'success' | 'error' | 'info' | 'warning'; duration: number } | null>(null);
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
-  // Actions
   const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info', duration?: number) => {
     if (toastTimer) clearTimeout(toastTimer);
     const ms = duration || (type === 'warning' ? 4500 : 3000);

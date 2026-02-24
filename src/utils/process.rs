@@ -48,11 +48,9 @@ fn overwrite_cmdline(name: &str) -> Result<()> {
     mem.seek(SeekFrom::Start(arg_start))
         .context("seek to arg_start")?;
 
-    // Zero the region first
     let zeros = vec![0u8; region_len];
     mem.write_all(&zeros).context("zero argv region")?;
 
-    // Seek back and write camouflage name
     mem.seek(SeekFrom::Start(arg_start))
         .context("seek back to arg_start")?;
     let write_len = name.len().min(region_len.saturating_sub(1));
@@ -73,7 +71,6 @@ fn read_arg_region() -> Result<(u64, u64)> {
         .read_to_string(&mut stat_buf)
         .context("read /proc/self/stat")?;
 
-    // Find closing paren of comm field
     let after_comm = stat_buf
         .rfind(')')
         .map(|i| i + 2) // skip ") "

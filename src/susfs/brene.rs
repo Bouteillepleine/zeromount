@@ -663,7 +663,6 @@ fn build_dynamic_uname() -> Result<(String, String)> {
     let parts: Vec<&str> = raw.splitn(4, ' ').collect();
     let release = parts.get(2).unwrap_or(&"5.10.0").to_string();
 
-    // Strip known build markers from version string
     let version = raw
         .replace("-ksu", "")
         .replace("-susfs", "")

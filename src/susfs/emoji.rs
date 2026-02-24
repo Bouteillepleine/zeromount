@@ -245,7 +245,6 @@ pub fn apply_emoji_app_overrides() -> EmojiAppResult {
         let ras_dir = format!("/data/data/{}/app_ras_blobs", pkg);
         let font_dest = format!("{}/FacebookEmoji.ttf", ras_dir);
 
-        // Nuke and recreate
         let _ = fs::remove_dir_all(&ras_dir);
         if let Err(e) = fs::create_dir_all(&ras_dir) {
             warn!("emoji: {} app_ras_blobs mkdir failed: {}", name, e);
@@ -257,7 +256,6 @@ pub fn apply_emoji_app_overrides() -> EmojiAppResult {
             continue;
         }
 
-        // Match ownership to the app's UID
         let app_uid = get_app_uid(pkg);
         if let Some(uid) = app_uid {
             let _ = set_ownership(&ras_dir, uid, uid);
@@ -267,7 +265,6 @@ pub fn apply_emoji_app_overrides() -> EmojiAppResult {
             info!("emoji: {} app_ras_blobs replaced (uid={}, perms=0644)", name, uid);
             result.fb_succeeded += 1;
         } else {
-            // Fallback: world-readable
             let _ = fs::set_permissions(&ras_dir, fs::Permissions::from_mode(0o755));
             let _ = fs::set_permissions(&font_dest, fs::Permissions::from_mode(0o644));
             warn!("emoji: {} app_ras_blobs replaced (uid unknown, perms=0644)", name);
@@ -302,7 +299,6 @@ pub fn apply_emoji_app_overrides() -> EmojiAppResult {
         debug!("emoji: GBoard font dir not found, skipping");
     }
 
-    // Clear GBoard caches and force-stop
     clear_gboard_caches();
 
     // Layer 3b: GMS font killer (one-shot)
