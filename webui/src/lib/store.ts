@@ -146,7 +146,8 @@ function createAppStore() {
   };
 
   const defaultAdb: AdbSettings = {
-    hide_usb_debugging: true,
+    usb_debugging: false,
+    developer_options: false,
     adb_root: false,
   };
 
@@ -407,7 +408,8 @@ function createAppStore() {
     if (cfg.adb) {
       setSettings('adb', prev => ({
         ...prev,
-        hide_usb_debugging: typeof cfg.adb.hide_usb_debugging === 'boolean' ? cfg.adb.hide_usb_debugging : prev.hide_usb_debugging,
+        usb_debugging: typeof (cfg.adb as any).usb_debugging === 'boolean' ? (cfg.adb as any).usb_debugging : typeof (cfg.adb as any).hide_usb_debugging === 'boolean' ? (cfg.adb as any).hide_usb_debugging : prev.usb_debugging,
+        developer_options: typeof cfg.adb.developer_options === 'boolean' ? cfg.adb.developer_options : prev.developer_options,
         adb_root: typeof cfg.adb.adb_root === 'boolean' ? cfg.adb.adb_root : prev.adb_root,
       }));
     }
@@ -793,21 +795,6 @@ function createAppStore() {
         rollbackKernel?.catch(() => {});
       }
       api.bridgeWrite(`brene.${key}`, String(old)).catch(() => {});
-      if (configVarSet) {
-        const varMap: Record<string, string> = {
-          avc_log_spoofing: 'avc_log_spoofing',
-          susfs_log: 'susfs_log',
-          hide_sus_mounts: 'hide_sus_mnts_for_all_or_non_su_procs',
-          emulate_vold_app_data: 'emulate_vold_app_data',
-          force_hide_lsposed: 'force_hide_lsposed',
-          spoof_cmdline: 'spoof_cmdline',
-          hide_ksu_loops: 'hide_loops',
-        };
-        const varName = varMap[key];
-        if (varName) {
-          api.writeSusfsConfigVar(varName, old ? '1' : '0').catch(() => {});
-        }
-      }
     }
   };
 
@@ -939,7 +926,13 @@ function createAppStore() {
     if (dump?.adb) {
       const a = dump.adb;
       const adb: Partial<AdbSettings> = {};
-      for (const key of ['hide_usb_debugging', 'adb_root'] as (keyof AdbSettings)[]) {
+      // Handle backward compat: old configs may still use hide_usb_debugging
+      if ('usb_debugging' in a) {
+        adb.usb_debugging = typeof a.usb_debugging === 'boolean' ? a.usb_debugging : String(a.usb_debugging) === 'true';
+      } else if ('hide_usb_debugging' in a) {
+        adb.usb_debugging = typeof a.hide_usb_debugging === 'boolean' ? a.hide_usb_debugging : String(a.hide_usb_debugging) === 'true';
+      }
+      for (const key of ['developer_options', 'adb_root'] as (keyof AdbSettings)[]) {
         if (key in a) {
           const v = a[key];
           adb[key] = typeof v === 'boolean' ? v : String(v) === 'true';
@@ -949,7 +942,7 @@ function createAppStore() {
       return;
     }
 
-    const keys: (keyof AdbSettings)[] = ['hide_usb_debugging', 'adb_root'];
+    const keys: (keyof AdbSettings)[] = ['usb_debugging', 'developer_options', 'adb_root'];
     const results = await Promise.allSettled(keys.map(k => api.configGet(`adb.${k}`)));
     const adb: Partial<AdbSettings> = {};
     results.forEach((r, i) => {

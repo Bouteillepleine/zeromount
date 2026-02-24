@@ -7,6 +7,7 @@ import { Modal } from '../components/layout/Modal';
 import { BottomSheet } from '../components/ui/BottomSheet';
 import { ChipSelect } from '../components/ui/ChipSelect';
 import { CollapsibleSubgroup } from '../components/ui/CollapsibleSubgroup';
+import { UnameSheet } from '../components/ui/UnameSheet';
 import { store } from '../lib/store';
 import { GITHUB_URL, PATHS } from '../lib/constants';
 import { ksuExec } from '../lib/ksuApi';
@@ -34,6 +35,7 @@ export function SettingsTab() {
   const [showStagingSheet, setShowStagingSheet] = createSignal(false);
   const [glassOpen, setGlassOpen] = createSignal(false);
   const [showVbh, setShowVbh] = createSignal(false);
+  const [showUnameSheet, setShowUnameSheet] = createSignal(false);
   const selectedAccent = () => store.settings.accentColor;
 
   const handleThemeChange = (newTheme: 'dark' | 'light' | 'auto' | 'amoled') => {
@@ -692,37 +694,16 @@ export function SettingsTab() {
                 label="Spoofing"
                 hiddenCount={0}
                 defaultItems={<>
-                  <div class="settings__group" style={{ "margin-top": "8px" }}>
-                    <div class="settings__item-label">Uname Spoofing</div>
-                    <div class="settings__item-desc" style={{ "margin-bottom": "10px" }}>Spoof kernel version string</div>
-                    <ChipSelect
-                      value={store.settings.uname.mode}
-                      onChange={(v) => store.setUnameMode(v as UnameMode)}
-                      options={[
-                        { value: 'disabled', label: 'Disabled' },
-                        { value: 'static', label: 'Static' },
-                        { value: 'dynamic', label: 'Dynamic' },
-                      ]}
-                    />
+                  <div class="settings__item" onClick={() => setShowUnameSheet(true)} style={{ cursor: 'pointer' }}>
+                    <div class="settings__item-content">
+                      <div class="settings__item-label">Uname Spoofing</div>
+                      <div class="settings__item-desc">Spoof kernel version string</div>
+                    </div>
+                    <button class="settings__select-trigger">
+                      <span>{store.settings.uname.mode === 'disabled' ? 'Disabled' : store.settings.uname.mode === 'static' ? 'Static' : 'Dynamic'}</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+                    </button>
                   </div>
-                  <Show when={store.settings.uname.mode !== 'disabled'}>
-                    <div class="settings__item settings__item--sub settings__item--stacked">
-                      <div class="settings__item-label">Release</div>
-                      <Input
-                        value={store.settings.uname.release}
-                        placeholder="5.10.0-android12-gki"
-                        onBlur={(e) => store.setUnameField('release', e.currentTarget.value)}
-                      />
-                    </div>
-                    <div class="settings__item settings__item--sub settings__item--stacked">
-                      <div class="settings__item-label">Version</div>
-                      <Input
-                        value={store.settings.uname.version}
-                        placeholder="#1 SMP PREEMPT"
-                        onBlur={(e) => store.setUnameField('version', e.currentTarget.value)}
-                      />
-                    </div>
-                  </Show>
                   <div class="settings__glass-row" onClick={() => setShowVbh(!showVbh())}>
                     <div class="settings__item-content">
                       <div class="settings__item-label">Verified Boot Hash</div>
@@ -766,26 +747,49 @@ export function SettingsTab() {
           </div>
           <Toggle checked={store.settings.brene.prop_spoofing} onChange={(v) => handleBreneToggle('prop_spoofing', v)} />
         </div>
-        <div class="settings__item">
-          <div class="settings__item-content">
-            <div class="settings__item-label">Hide USB Debugging</div>
-            <div class="settings__item-desc">Hide USB debugging from prop level + libc hook - use with HMA-OSS for full coverage</div>
-          </div>
-          <Toggle
-            checked={store.settings.adb.hide_usb_debugging}
-            onChange={(v) => store.setAdbToggle('hide_usb_debugging', v)}
-          />
-        </div>
-        <div class="settings__item">
-          <div class="settings__item-content">
-            <div class="settings__item-label">ADB Root</div>
-            <div class="settings__item-desc">Run ADB as root for developers - requires reboot</div>
-          </div>
-          <Toggle
-            checked={store.settings.adb.adb_root}
-            onChange={(v) => store.setAdbToggle('adb_root', v)}
-          />
-        </div>
+        <CollapsibleSubgroup
+          label="Android Settings"
+          hiddenCount={3}
+          defaultItems={<></>}
+          expandedItems={<>
+            <div class="settings__item">
+              <div class="settings__item-content">
+                <div class="settings__item-label">Developer Options</div>
+                <div class="settings__item-desc">Show or hide developer options in system settings</div>
+              </div>
+              <Toggle
+                checked={store.settings.adb.developer_options}
+                onChange={async (v) => {
+                  store.setAdbToggle('developer_options', v);
+                  await ksuExec(`settings put global development_settings_enabled ${v ? 1 : 0}`);
+                }}
+              />
+            </div>
+            <div class="settings__item">
+              <div class="settings__item-content">
+                <div class="settings__item-label">USB Debugging</div>
+                <div class="settings__item-desc">Enable or disable USB debugging</div>
+              </div>
+              <Toggle
+                checked={store.settings.adb.usb_debugging}
+                onChange={async (v) => {
+                  store.setAdbToggle('usb_debugging', v);
+                  await ksuExec(`settings put global adb_enabled ${v ? 1 : 0}`);
+                }}
+              />
+            </div>
+            <div class="settings__item">
+              <div class="settings__item-content">
+                <div class="settings__item-label">ADB Root</div>
+                <div class="settings__item-desc">Run ADB as root for developers - requires reboot</div>
+              </div>
+              <Toggle
+                checked={store.settings.adb.adb_root}
+                onChange={(v) => store.setAdbToggle('adb_root', v)}
+              />
+            </div>
+          </>}
+        />
       </Card>
 
       <Card>
@@ -1019,6 +1023,17 @@ export function SettingsTab() {
           </div>
         </div>
       </Modal>
+
+      <UnameSheet
+        open={showUnameSheet()}
+        onClose={() => setShowUnameSheet(false)}
+        mode={store.settings.uname.mode}
+        release={store.settings.uname.release}
+        version={store.settings.uname.version}
+        onModeChange={(m) => store.setUnameMode(m)}
+        onReleaseChange={(v) => store.setUnameField('release', v)}
+        onVersionChange={(v) => store.setUnameField('version', v)}
+      />
     </div>
   );
 }

@@ -59,6 +59,14 @@ cp "$BIN" "$MODPATH/bin/zm"
 chmod 755 "$MODPATH/bin/zm"
 zm_print "  ✅ Binary ready"
 
+if [ -c /dev/zeromount ] || [ -e /dev/zeromount ]; then
+    zm_print "  ✅ ZeroMount VFS driver detected"
+else
+    zm_print "  ⚠️ ZeroMount VFS driver not found"
+    zm_print "  ⚠️ Module will use overlay/magic mount mode"
+    zm_print "  ℹ️ Flash a ZeroMount-patched kernel for VFS mode"
+fi
+
 ZM_DATA="/data/adb/zeromount"
 zm_print "📁 Preparing Data" 0.3 "h"
 
@@ -133,11 +141,13 @@ if [ -f "$VBH_FILE" ]; then
     fi
 fi
 
-if [ "$SUSFS_DETECTED" != true ]; then
+if "$BIN" detect 2>/dev/null | grep -q 'susfs: true'; then
+    zm_print "  ✅ SUSFS detected in kernel"
+else
     zm_print "  ⚠️ SUSFS not detected in kernel"
 fi
 
-# Write both external module configs from our config.toml (always, fresh or upgrade)
+zm_print "  🔄 Syncing SUSFS bidirectional"
 "$BIN" bridge init 2>/dev/null && zm_print "  ✅ External configs synced" || zm_print "  ⚠️ Bridge init skipped (binary error)"
 
 zm_print "🚀 Finalizing" 0.3 "h"

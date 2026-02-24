@@ -302,8 +302,10 @@ impl Default for EmojiConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdbConfig {
-    #[serde(default = "default_true")]
-    pub hide_usb_debugging: bool,
+    #[serde(default, alias = "hide_usb_debugging")]
+    pub usb_debugging: bool,
+    #[serde(default)]
+    pub developer_options: bool,
     #[serde(default)]
     pub adb_root: bool,
 }
@@ -311,7 +313,8 @@ pub struct AdbConfig {
 impl Default for AdbConfig {
     fn default() -> Self {
         Self {
-            hide_usb_debugging: true,
+            usb_debugging: false,
+            developer_options: false,
             adb_root: false,
         }
     }
@@ -541,7 +544,9 @@ impl ZeroMountConfig {
             "emoji.enabled" => Some(self.emoji.enabled.to_string()),
 
             // adb.*
-            "adb.hide_usb_debugging" => Some(self.adb.hide_usb_debugging.to_string()),
+            "adb.usb_debugging" => Some(self.adb.usb_debugging.to_string()),
+            "adb.hide_usb_debugging" => Some(self.adb.usb_debugging.to_string()),
+            "adb.developer_options" => Some(self.adb.developer_options.to_string()),
             "adb.adb_root" => Some(self.adb.adb_root.to_string()),
 
             // per_module.<id>.<field>
@@ -613,7 +618,8 @@ impl ZeroMountConfig {
             "emoji.enabled" => self.emoji.enabled = value.parse()?,
 
             // adb.*
-            "adb.hide_usb_debugging" => self.adb.hide_usb_debugging = value.parse()?,
+            "adb.usb_debugging" | "adb.hide_usb_debugging" => self.adb.usb_debugging = value.parse()?,
+            "adb.developer_options" => self.adb.developer_options = value.parse()?,
             "adb.adb_root" => self.adb.adb_root = value.parse()?,
 
             // per_module.<id>.<field>
@@ -783,7 +789,8 @@ mod tests {
         assert_eq!(config.uname.mode, UnameMode::Disabled);
         assert!(!config.perf.enabled);
         assert!(!config.emoji.enabled);
-        assert!(config.adb.hide_usb_debugging);
+        assert!(!config.adb.usb_debugging);
+        assert!(!config.adb.developer_options);
         assert!(!config.adb.adb_root);
         assert!(config.per_module.is_empty());
     }
@@ -819,11 +826,17 @@ mod tests {
         config.set("uname.release", "5.10.0-gki").unwrap();
         assert_eq!(config.get("uname.release").unwrap(), "5.10.0-gki");
 
-        config.set("adb.hide_usb_debugging", "true").unwrap();
-        assert_eq!(config.get("adb.hide_usb_debugging").unwrap(), "true");
+        config.set("adb.usb_debugging", "true").unwrap();
+        assert_eq!(config.get("adb.usb_debugging").unwrap(), "true");
+
+        config.set("adb.developer_options", "true").unwrap();
+        assert_eq!(config.get("adb.developer_options").unwrap(), "true");
 
         config.set("adb.adb_root", "true").unwrap();
         assert_eq!(config.get("adb.adb_root").unwrap(), "true");
+
+        // Backward compat: old key still works
+        assert_eq!(config.get("adb.hide_usb_debugging").unwrap(), "true");
     }
 
     #[test]
@@ -937,7 +950,8 @@ kstat = false
         assert!(config.brene.auto_hide_apk);
         assert!(config.brene.auto_hide_rooted_folders);
         assert_eq!(config.uname.mode, UnameMode::Disabled);
-        assert!(config.adb.hide_usb_debugging);
+        assert!(!config.adb.usb_debugging);
+        assert!(!config.adb.developer_options);
         assert!(!config.adb.adb_root);
     }
 

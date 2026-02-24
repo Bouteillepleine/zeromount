@@ -52,8 +52,7 @@ pub fn write_config(dir: &Path, config: &ZeroMountConfig) -> Result<()> {
             lines.push(format!("{CONFIG_PREFIX}{key}={val}"));
         }
     }
-    // Hardcoded non-bridged
-    lines.push(format!("{CONFIG_PREFIX}developer_options=1"));
+    lines.push(format!("{CONFIG_PREFIX}developer_options={}", translate::bool_to_int(config.adb.developer_options)));
 
     lines.push(String::new());
     fs::write(&path, lines.join("\n"))
@@ -129,7 +128,7 @@ pub fn merge_config(
             lines.push(format!("{CONFIG_PREFIX}{key}={val}"));
         }
     }
-    lines.push(format!("{CONFIG_PREFIX}developer_options=1"));
+    lines.push(format!("{CONFIG_PREFIX}developer_options={}", translate::bool_to_int(config.adb.developer_options)));
     lines.push(String::new());
     fs::write(&path, lines.join("\n"))
         .with_context(|| format!("writing merged {}", path.display()))?;
@@ -173,7 +172,8 @@ pub fn config_to_keys(config: &ZeroMountConfig) -> HashMap<String, String> {
 
     m.insert("hide_zygisk_modules".into(), translate::bool_to_int(config.brene.auto_hide_zygisk).to_string());
     m.insert("hide_injections".into(), translate::bool_to_int(config.brene.auto_hide_injections).to_string());
-    m.insert("usb_debugging".into(), translate::bool_to_int(config.adb.hide_usb_debugging).to_string());
+    m.insert("usb_debugging".into(), translate::bool_to_int(config.adb.usb_debugging).to_string());
+    m.insert("developer_options".into(), translate::bool_to_int(config.adb.developer_options).to_string());
     m.insert("enable_log".into(), translate::bool_to_int(config.brene.susfs_log).to_string());
     m.insert("hide_modules_img".into(), translate::bool_to_int(config.brene.hide_ksu_loops).to_string());
     m.insert("verified_boot_hash".into(), translate::string_to_external(&config.brene.verified_boot_hash));
@@ -283,8 +283,16 @@ pub fn apply_keys_to_config(keys: &HashMap<String, String>, config: &mut ZeroMou
 
     if let Some(v) = keys.get("usb_debugging") {
         let val = translate::int_to_bool(v.parse().unwrap_or(0));
-        if config.adb.hide_usb_debugging != val {
-            config.adb.hide_usb_debugging = val;
+        if config.adb.usb_debugging != val {
+            config.adb.usb_debugging = val;
+            changed = true;
+        }
+    }
+
+    if let Some(v) = keys.get("developer_options") {
+        let val = translate::int_to_bool(v.parse().unwrap_or(0));
+        if config.adb.developer_options != val {
+            config.adb.developer_options = val;
             changed = true;
         }
     }
@@ -348,6 +356,7 @@ const BRIDGED_KEY_ORDER: &[&str] = &[
     "hide_zygisk_modules",
     "hide_injections",
     "usb_debugging",
+    "developer_options",
     "enable_log",
     "hide_modules_img",
     "verified_boot_hash",
@@ -373,7 +382,8 @@ mod tests {
         c.brene.try_umount = false;
         c.brene.auto_hide_zygisk = true;
         c.brene.auto_hide_injections = true;
-        c.adb.hide_usb_debugging = true;
+        c.adb.usb_debugging = true;
+        c.adb.developer_options = true;
         c.brene.susfs_log = false;
         c.brene.hide_ksu_loops = true;
         c.brene.verified_boot_hash = "abc123".into();
@@ -400,13 +410,14 @@ mod tests {
         assert_eq!(keys["hide_zygisk_modules"], "1");
         assert_eq!(keys["hide_injections"], "1");
         assert_eq!(keys["usb_debugging"], "1");
+        assert_eq!(keys["developer_options"], "1");
         assert_eq!(keys["enable_log"], "0");
         assert_eq!(keys["hide_modules_img"], "1");
         assert_eq!(keys["verified_boot_hash"], "'abc123'");
         assert_eq!(keys["custom_uname_kernel_release"], "'5.10.0-gki'");
         assert_eq!(keys["custom_uname_kernel_version"], "'#1 SMP'");
         assert_eq!(keys["try_umount"], "0");
-        assert_eq!(keys.len(), 19);
+        assert_eq!(keys.len(), 20);
     }
 
     #[test]
@@ -417,7 +428,7 @@ mod tests {
         let content = fs::read_to_string(dir.path().join(CONFIG_FILE)).unwrap();
         assert!(content.contains("config_enable_avc_log_spoofing=1"));
         assert!(content.contains("config_uname2_spoofing=1"));
-        assert!(content.contains("config_developer_options=1"));
+        assert!(content.contains("config_developer_options="));
         // Should NOT contain bare keys without prefix
         assert!(!content.contains("\nenable_avc_log_spoofing="));
     }

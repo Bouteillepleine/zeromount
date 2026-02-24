@@ -154,7 +154,8 @@ export interface EmojiSettings {
 }
 
 export interface AdbSettings {
-  hide_usb_debugging: boolean;
+  usb_debugging: boolean;
+  developer_options: boolean;
   adb_root: boolean;
 }
 

@@ -689,10 +689,12 @@ export function StatusTab() {
               <span class="status-info__label color-text-tertiary">Root:</span>
               <span class="color-text-accent">{store.rootManager() ?? 'Unknown'}</span>
             </div>
-            <div>
-              <span class="status-info__label color-text-tertiary">misc:</span>
-              <span class="color-text-primary">/dev/zeromount</span>
-            </div>
+            <Show when={store.engineActive()}>
+              <div>
+                <span class="status-info__label color-text-tertiary">misc:</span>
+                <span class="color-text-primary">/dev/zeromount</span>
+              </div>
+            </Show>
           </div>
         </Show>
       </Card>
