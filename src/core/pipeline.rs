@@ -231,7 +231,6 @@ impl MountController<Planned> {
         let failed = results.iter().filter(|r| !r.success).count();
         info!(succeeded, failed, "execution complete");
 
-
         Ok(MountController {
             state: Mounted {
                 config: self.state.config,

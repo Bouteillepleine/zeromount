@@ -11,10 +11,6 @@ use crate::utils::selinux::copy_selinux_context;
 
 use super::node::{build_node_tree, needs_tmpfs, Node, NodeFileType};
 
-// ---------------------------------------------------------------------------
-// Mount helpers
-// ---------------------------------------------------------------------------
-
 fn path_to_cstring(path: &Path) -> Result<CString> {
     CString::new(path.as_os_str().as_encoded_bytes())
         .with_context(|| format!("path contains null byte: {}", path.display()))
@@ -180,10 +176,6 @@ fn lazy_unmount(target: &Path) -> Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Stats
-// ---------------------------------------------------------------------------
-
 struct MountStats {
     applied: u32,
     failed: u32,
@@ -203,10 +195,6 @@ impl MountStats {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Public entry point
-// ---------------------------------------------------------------------------
 
 pub fn mount_magic(
     modules: &[ScannedModule],
@@ -253,10 +241,6 @@ pub fn mount_magic(
 
     Ok(build_results(modules, &stats))
 }
-
-// ---------------------------------------------------------------------------
-// Result aggregation
-// ---------------------------------------------------------------------------
 
 fn build_results(modules: &[ScannedModule], stats: &MountStats) -> Vec<MountResult> {
     // Group mount paths by module (best-effort: paths don't carry module info,
@@ -315,10 +299,6 @@ fn build_results(modules: &[ScannedModule], stats: &MountStats) -> Vec<MountResu
         })
         .collect()
 }
-
-// ---------------------------------------------------------------------------
-// Recursive traversal
-// ---------------------------------------------------------------------------
 
 fn apply_node_recursive(
     node: &mut Node,
@@ -468,10 +448,6 @@ fn apply_node_recursive(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Tmpfs directory: self-bind, mirror, recurse, ro, MS_MOVE
-// ---------------------------------------------------------------------------
-
 fn apply_tmpfs_directory(
     node: &mut Node,
     real_path: &Path,
@@ -556,10 +532,6 @@ fn apply_tmpfs_directory(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Inline directory: writable surface already exists (inside parent tmpfs)
-// ---------------------------------------------------------------------------
-
 fn apply_inline_directory(
     node: &mut Node,
     real_path: &Path,
@@ -606,10 +578,6 @@ fn apply_inline_directory(
     debug!(path = %real_path.display(), "directory inlined in parent tmpfs");
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Mirror stock filesystem entries
-// ---------------------------------------------------------------------------
 
 fn mirror_stock_entries(real_path: &Path, wpath: &Path, node: &Node) -> Result<()> {
     let entries = match fs::read_dir(real_path) {
@@ -678,10 +646,6 @@ fn mirror_stock_entries(real_path: &Path, wpath: &Path, node: &Node) -> Result<(
 
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Utilities
-// ---------------------------------------------------------------------------
 
 fn workdir_dest(workdir: &Path, real_path: &Path) -> PathBuf {
     workdir.join(real_path.strip_prefix("/").unwrap_or(real_path))
