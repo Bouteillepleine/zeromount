@@ -417,9 +417,30 @@ pub fn handle_vold_app_data() -> Result<()> {
         tracing::warn!("vold_app_data: SUSFS unavailable");
         return Ok(());
     };
-    client.ensure_root_paths();
+    // Root paths must be set before add_sus_path works (susfs v1.5.8+)
+    if let Err(e) = client.set_sdcard_root_path("/sdcard") {
+        tracing::warn!("vold_app_data: set_sdcard_root_path failed: {e}");
+    }
+    if let Err(e) = client.set_android_data_root_path("/sdcard/Android/data") {
+        tracing::warn!("vold_app_data: set_android_data_root_path failed: {e}");
+    }
     let count = crate::susfs::brene::emulate_vold_app_data(&client);
     tracing::info!("vold_app_data: {count} paths hidden");
+    Ok(())
+}
+
+pub fn handle_try_umount() -> Result<()> {
+    let config = crate::core::config::ZeroMountConfig::load(None)?;
+    if !config.brene.try_umount {
+        tracing::info!("try_umount: disabled in config, skipping");
+        return Ok(());
+    }
+    let Ok(client) = crate::susfs::SusfsClient::probe() else {
+        tracing::warn!("try_umount: SUSFS unavailable");
+        return Ok(());
+    };
+    let count = crate::susfs::brene::try_umount_ksu_mounts(&client, config.brene.hide_sus_mounts);
+    tracing::info!("try_umount: {count} paths registered");
     Ok(())
 }
 

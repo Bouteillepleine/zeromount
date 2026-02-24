@@ -95,7 +95,7 @@ pub fn merge_config(
                 }
             }
             // false-default keys: preserve external value if set to 1
-            "susfs_log" | "spoof_cmdline" | "spoof_uname" => {
+            "susfs_log" | "spoof_cmdline" | "spoof_uname" | "auto_try_umount" => {
                 if let Some(ext) = existing.get(key.as_str()) {
                     if ext == "1" || ext == "2" {
                         ext.clone()
@@ -159,6 +159,7 @@ pub fn config_to_keys(config: &ZeroMountConfig) -> HashMap<String, String> {
     m.insert("force_hide_lsposed".into(), translate::bool_to_int(config.brene.force_hide_lsposed).to_string());
     m.insert("vbmeta_size".into(), config.brene.vbmeta_size.to_string());
     m.insert("emulate_vold_app_data".into(), translate::bool_to_int(config.brene.emulate_vold_app_data).to_string());
+    m.insert("auto_try_umount".into(), translate::bool_to_int(config.brene.try_umount).to_string());
     m.insert("disable_webui_bin_update".into(), "1".into());
 
     // Hardcoded non-bridged defaults
@@ -261,6 +262,14 @@ pub fn apply_keys_to_config(keys: &HashMap<String, String>, config: &mut ZeroMou
         }
     }
 
+    if let Some(v) = keys.get("auto_try_umount") {
+        let val = translate::int_to_bool(v.parse().unwrap_or(0));
+        if config.brene.try_umount != val {
+            config.brene.try_umount = val;
+            changed = true;
+        }
+    }
+
     changed
 }
 
@@ -277,6 +286,7 @@ const BRIDGED_KEY_ORDER: &[&str] = &[
     "force_hide_lsposed",
     "vbmeta_size",
     "emulate_vold_app_data",
+    "auto_try_umount",
     "disable_webui_bin_update",
 ];
 
@@ -289,7 +299,6 @@ const HARDCODED_DEFAULTS: &[(&str, &str)] = &[
     ("hide_gapps", "0"),
     ("hide_revanced", "0"),
     ("umount_for_zygote_iso_service", "0"),
-    ("auto_try_umount", "0"),
     ("skip_legit_mounts", "0"),
 ];
 

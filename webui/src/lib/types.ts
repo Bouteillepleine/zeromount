@@ -131,6 +131,7 @@ export interface BreneSettings {
   spoof_cmdline: boolean;
   hide_ksu_loops: boolean;
   kernel_umount: boolean;
+  try_umount: boolean;
   prop_spoofing: boolean;
   auto_hide_injections: boolean;
   verified_boot_hash: string;

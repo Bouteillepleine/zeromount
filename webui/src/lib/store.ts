@@ -113,6 +113,7 @@ function createAppStore() {
     spoof_cmdline: false,
     hide_ksu_loops: true,
     kernel_umount: true,
+    try_umount: false,
     prop_spoofing: true,
     auto_hide_injections: true,
     verified_boot_hash: '',
@@ -721,7 +722,7 @@ function createAppStore() {
       'auto_hide_rooted_folders', 'auto_hide_recovery', 'auto_hide_tmp',
       'avc_log_spoofing', 'susfs_log',
       'hide_sus_mounts', 'emulate_vold_app_data', 'force_hide_lsposed',
-      'spoof_cmdline', 'hide_ksu_loops', 'kernel_umount', 'prop_spoofing', 'auto_hide_injections',
+      'spoof_cmdline', 'hide_ksu_loops', 'kernel_umount', 'try_umount', 'prop_spoofing', 'auto_hide_injections',
     ];
 
     if (dump?.brene && dump?.uname) {

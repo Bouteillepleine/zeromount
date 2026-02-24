@@ -174,6 +174,8 @@ pub struct BreneConfig {
     pub hide_ksu_loops: bool,
     #[serde(default = "default_true")]
     pub kernel_umount: bool,
+    #[serde(default)]
+    pub try_umount: bool,
     #[serde(default = "default_true")]
     pub prop_spoofing: bool,
     #[serde(default = "default_true")]
@@ -208,6 +210,7 @@ impl Default for BreneConfig {
             spoof_cmdline: false,
             hide_ksu_loops: true,
             kernel_umount: true,
+            try_umount: false,
             prop_spoofing: true,
             auto_hide_injections: true,
             custom_sus_paths: Vec::new(),
@@ -516,6 +519,7 @@ impl ZeroMountConfig {
             "brene.spoof_cmdline" => Some(self.brene.spoof_cmdline.to_string()),
             "brene.hide_ksu_loops" => Some(self.brene.hide_ksu_loops.to_string()),
             "brene.kernel_umount" => Some(self.brene.kernel_umount.to_string()),
+            "brene.try_umount" => Some(self.brene.try_umount.to_string()),
             "brene.prop_spoofing" => Some(self.brene.prop_spoofing.to_string()),
             "brene.auto_hide_injections" => Some(self.brene.auto_hide_injections.to_string()),
             "brene.custom_sus_paths" => Some(self.brene.custom_sus_paths.join(",")),
@@ -587,6 +591,7 @@ impl ZeroMountConfig {
             "brene.spoof_cmdline" => self.brene.spoof_cmdline = value.parse()?,
             "brene.hide_ksu_loops" => self.brene.hide_ksu_loops = value.parse()?,
             "brene.kernel_umount" => self.brene.kernel_umount = value.parse()?,
+            "brene.try_umount" => self.brene.try_umount = value.parse()?,
             "brene.prop_spoofing" => self.brene.prop_spoofing = value.parse()?,
             "brene.auto_hide_injections" => self.brene.auto_hide_injections = value.parse()?,
             "brene.custom_sus_paths" => self.brene.custom_sus_paths = parse_csv(value),
@@ -772,6 +777,7 @@ mod tests {
         assert!(!config.brene.spoof_cmdline);
         assert!(config.brene.hide_ksu_loops);
         assert!(config.brene.kernel_umount);
+        assert!(!config.brene.try_umount);
         assert!(config.brene.auto_hide_injections);
         assert!(config.brene.emulate_vold_app_data);
         assert_eq!(config.uname.mode, UnameMode::Disabled);

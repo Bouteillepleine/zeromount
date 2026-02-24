@@ -763,9 +763,9 @@ echo "]"
     await ksuExec(`sed -i 's/^${escapeShellArg(key)}=.*/${escapeShellArg(key)}=${escapeShellArg(value)}/' ${escapeShellArg(configPath)}`);
   },
 
-  async bridgeWrite(key: string, value: string): Promise<void> {
+  async bridgeWrite(_key: string, _value: string): Promise<void> {
     if (shouldUseMock()) return;
-    await ksuExec(`${PATHS.BINARY} bridge write ${escapeShellArg(key)} ${escapeShellArg(value)}`);
+    await ksuExec(`${PATHS.BINARY} bridge write`);
   },
 
   async readSusfsConfigVar(key: string, basePath = '/data/adb/susfs4ksu/config.sh'): Promise<string | null> {

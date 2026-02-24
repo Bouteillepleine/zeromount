@@ -160,6 +160,7 @@ pub fn config_to_keys(config: &ZeroMountConfig) -> HashMap<String, String> {
     m.insert("hide_sdcard_android_data".into(), translate::bool_to_int(config.brene.emulate_vold_app_data).to_string());
     m.insert("hide_sus_mnts_for_non_su_procs".into(), translate::bool_to_int(config.brene.hide_sus_mounts).to_string());
     m.insert("kernel_umount".into(), translate::bool_to_int(config.brene.kernel_umount).to_string());
+    m.insert("try_umount".into(), translate::bool_to_int(config.brene.try_umount).to_string());
 
     // Uname: 3 mutually exclusive booleans
     let (uname, uname2, custom) = translate::uname_mode_to_brene_triple(
@@ -237,6 +238,14 @@ pub fn apply_keys_to_config(keys: &HashMap<String, String>, config: &mut ZeroMou
         let val = translate::int_to_bool(v.parse().unwrap_or(0));
         if config.brene.kernel_umount != val {
             config.brene.kernel_umount = val;
+            changed = true;
+        }
+    }
+
+    if let Some(v) = keys.get("try_umount") {
+        let val = translate::int_to_bool(v.parse().unwrap_or(0));
+        if config.brene.try_umount != val {
+            config.brene.try_umount = val;
             changed = true;
         }
     }
@@ -332,6 +341,7 @@ const BRIDGED_KEY_ORDER: &[&str] = &[
     "hide_sdcard_android_data",
     "hide_sus_mnts_for_non_su_procs",
     "kernel_umount",
+    "try_umount",
     "uname_spoofing",
     "uname2_spoofing",
     "custom_uname_spoofing",
@@ -360,6 +370,7 @@ mod tests {
         c.brene.auto_hide_rooted_folders = true;
         c.brene.hide_sus_mounts = true;
         c.brene.kernel_umount = true;
+        c.brene.try_umount = false;
         c.brene.auto_hide_zygisk = true;
         c.brene.auto_hide_injections = true;
         c.adb.hide_usb_debugging = true;
@@ -394,7 +405,8 @@ mod tests {
         assert_eq!(keys["verified_boot_hash"], "'abc123'");
         assert_eq!(keys["custom_uname_kernel_release"], "'5.10.0-gki'");
         assert_eq!(keys["custom_uname_kernel_version"], "'#1 SMP'");
-        assert_eq!(keys.len(), 18);
+        assert_eq!(keys["try_umount"], "0");
+        assert_eq!(keys.len(), 19);
     }
 
     #[test]

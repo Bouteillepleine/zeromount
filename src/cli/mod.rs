@@ -79,6 +79,9 @@ pub enum Commands {
     /// Vold app data emulation (post-boot only — needs pm)
     #[command(name = "vold-app-data")]
     VoldAppData,
+    /// Auto-discover KSU mounts and register kernel umount paths (post-boot)
+    #[command(name = "try-umount")]
+    TryUmount,
     /// Print version
     Version,
 }

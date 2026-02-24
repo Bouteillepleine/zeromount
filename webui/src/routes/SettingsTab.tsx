@@ -618,7 +618,7 @@ export function SettingsTab() {
 
               <CollapsibleSubgroup
                 label="Auto-Hiding"
-                hiddenCount={7}
+                hiddenCount={8}
                 defaultItems={
                   <div class="settings__item">
                     <div class="settings__item-content">
@@ -677,6 +677,13 @@ export function SettingsTab() {
                       <div class="settings__item-desc">Enable kernel-level module unmounting via ksud</div>
                     </div>
                     <Toggle checked={store.settings.brene.kernel_umount} onChange={(v) => handleBreneToggle('kernel_umount', v)} />
+                  </div>
+                  <div class="settings__item">
+                    <div class="settings__item-content">
+                      <div class="settings__item-label">Auto Try Umount</div>
+                      <div class="settings__item-desc">Discover and unmount KSU bind mounts in app namespaces</div>
+                    </div>
+                    <Toggle checked={store.settings.brene.try_umount} onChange={(v) => handleBreneToggle('try_umount', v)} />
                   </div>
                 </>}
               />

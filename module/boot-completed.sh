@@ -28,7 +28,12 @@ fi
 # Emoji needs pm (package manager), only available post-boot
 "$BIN" emoji apply-apps 2>/dev/null || true
 
-# vold-app-data needs FUSE sdcard — wait like official susfs4ksu
+# try_umount: discover KSU bind mounts and register kernel umount paths
+if [ "$("$BIN" config get brene.try_umount 2>/dev/null)" = "true" ]; then
+    "$BIN" try-umount 2>/dev/null || true
+fi
+
+# vold-app-data: wait for FUSE sdcard like susfs4ksu
 if [ "$("$BIN" config get brene.emulate_vold_app_data 2>/dev/null)" = "true" ]; then
     until [ -d "/sdcard/Android/data" ]; do sleep 1; done
     "$BIN" vold-app-data 2>/dev/null || true

@@ -681,7 +681,7 @@ fn build_dynamic_uname() -> Result<(String, String)> {
 const SUSFS_PERSISTENT_CONFIG: &str = "/data/adb/susfs4ksu/config.sh";
 const SUSFS_CONFIG_DIR: &str = "/data/adb/susfs4ksu";
 
-const SUSFS_SHARED_KEYS: [(&str, fn(&crate::core::config::BreneConfig) -> bool); 7] = [
+const SUSFS_SHARED_KEYS: [(&str, fn(&crate::core::config::BreneConfig) -> bool); 8] = [
     ("susfs_log", |b| b.susfs_log),
     ("avc_log_spoofing", |b| b.avc_log_spoofing),
     ("hide_sus_mnts_for_all_or_non_su_procs", |b| b.hide_sus_mounts),
@@ -689,6 +689,7 @@ const SUSFS_SHARED_KEYS: [(&str, fn(&crate::core::config::BreneConfig) -> bool);
     ("force_hide_lsposed", |b| b.force_hide_lsposed),
     ("spoof_cmdline", |b| b.spoof_cmdline),
     ("hide_loops", |b| b.hide_ksu_loops),
+    ("auto_try_umount", |b| b.try_umount),
 ];
 
 // Sync our BRENE toggles to SUSFS config.sh so SUSFS boot scripts stay in sync
@@ -705,7 +706,7 @@ pub fn sync_susfs_config(config: &ZeroMountConfig) -> Result<()> {
                 content.push_str(&format!("{key}={val}\n"));
             }
             fs::write(config_path, &content).context("creating SUSFS config.sh")?;
-            info!("BRENE: created SUSFS config.sh with 7 settings");
+            info!("BRENE: created SUSFS config.sh with 8 settings");
         } else {
             debug!("SUSFS not installed, skipping config sync");
         }
@@ -730,7 +731,7 @@ pub fn sync_susfs_config(config: &ZeroMountConfig) -> Result<()> {
     }
 
     fs::write(config_path, &content).context("writing SUSFS config.sh")?;
-    info!("BRENE: synced 7 settings to SUSFS config.sh");
+    info!("BRENE: synced 8 settings to SUSFS config.sh");
     Ok(())
 }
 
@@ -765,21 +766,136 @@ pub fn emulate_vold_app_data(client: &SusfsClient) -> u32 {
         let path = format!("/sdcard/Android/data/{pkg}");
         match client.add_sus_path(&path) {
             Ok(()) => count += 1,
-            Err(e) => debug!("vold app data hide failed for {pkg}: {e}"),
+            Err(e) => debug!("vold_app_data: hide failed for {pkg}: {e}"),
         }
     }
 
     count
 }
 
-fn apply_force_hide_lsposed() {
-    let ksud = if Path::new("/data/adb/ksu/bin/ksud").exists() {
+const SUSFS4KSU_TRY_UMOUNT_TXT: &str = "/data/adb/susfs4ksu/try_umount.txt";
+
+fn find_ksud() -> &'static str {
+    if Path::new("/data/adb/ksu/bin/ksud").exists() {
         "/data/adb/ksu/bin/ksud"
     } else if Path::new("/data/adb/ap/bin/ksud").exists() {
         "/data/adb/ap/bin/ksud"
     } else {
         "ksud"
+    }
+}
+
+pub fn try_umount_ksu_mounts(client: &SusfsClient, hide_sus_mounts_enabled: bool) -> u32 {
+    let ksud = find_ksud();
+
+    if hide_sus_mounts_enabled {
+        let _ = client.hide_sus_mounts(false);
+    }
+
+    let mountinfo = match fs::read_to_string("/proc/1/mountinfo") {
+        Ok(m) => m,
+        Err(e) => {
+            warn!("try_umount: cannot read /proc/1/mountinfo: {e}");
+            if hide_sus_mounts_enabled {
+                let _ = client.hide_sus_mounts(true);
+            }
+            return 0;
+        }
     };
+
+    let mut count = 0u32;
+    for line in mountinfo.lines() {
+        if !is_ksu_mount(line) {
+            continue;
+        }
+        let mount_point = match extract_mount_point(line) {
+            Some(p) => p,
+            None => continue,
+        };
+        if crate::utils::signal::shutdown_requested() {
+            break;
+        }
+        match run_command_with_timeout(
+            Command::new(ksud).args(["kernel", "umount", "add", mount_point, "--flags", "2"]),
+            CMD_TIMEOUT,
+        ) {
+            Ok(o) if o.status.success() => {
+                count += 1;
+                debug!("try_umount registered: {mount_point}");
+            }
+            Ok(o) => {
+                debug!(
+                    "try_umount failed for {mount_point} (exit {})",
+                    o.status.code().unwrap_or(-1)
+                );
+            }
+            Err(e) => {
+                debug!("try_umount failed for {mount_point}: {e}");
+            }
+        }
+    }
+
+    let txt_count = process_try_umount_txt(ksud);
+    count += txt_count;
+
+    if hide_sus_mounts_enabled {
+        let _ = client.hide_sus_mounts(true);
+    }
+
+    info!("try_umount: {count} paths registered ({txt_count} from txt)");
+    count
+}
+
+fn is_ksu_mount(line: &str) -> bool {
+    let mut fields = line.split_whitespace();
+    let mount_id: u32 = match fields.next().and_then(|f| f.parse().ok()) {
+        Some(id) => id,
+        None => return false,
+    };
+    let in_range =
+        (100_000..400_000).contains(&mount_id) || (500_000..600_000).contains(&mount_id);
+    if !in_range {
+        return false;
+    }
+    line.contains(" KSU") || line.contains(" shared")
+}
+
+fn extract_mount_point(line: &str) -> Option<&str> {
+    line.split_whitespace().nth(4)
+}
+
+fn process_try_umount_txt(ksud: &str) -> u32 {
+    let content = match fs::read_to_string(SUSFS4KSU_TRY_UMOUNT_TXT) {
+        Ok(c) => c,
+        Err(_) => return 0,
+    };
+    let mut count = 0u32;
+    for line in content.lines() {
+        let path = line.trim();
+        if path.is_empty() || path.starts_with('#') {
+            continue;
+        }
+        if crate::utils::signal::shutdown_requested() {
+            break;
+        }
+        match run_command_with_timeout(
+            Command::new(ksud).args(["kernel", "umount", "add", path, "--flags", "2"]),
+            CMD_TIMEOUT,
+        ) {
+            Ok(o) if o.status.success() => {
+                count += 1;
+                debug!("try_umount (txt) registered: {path}");
+            }
+            Ok(_) | Err(_) => {
+                debug!("try_umount (txt) failed for {path}");
+            }
+        }
+    }
+    count
+}
+
+fn apply_force_hide_lsposed() {
+    let ksud = find_ksud();
 
     for path in DEX2OAT_UMOUNT_PATHS {
         if crate::utils::signal::shutdown_requested() {
