@@ -146,7 +146,11 @@ if [ -f "$VBH_FILE" ]; then
 fi
 
 if "$BIN" detect 2>/dev/null | grep -q 'susfs: true'; then
-    zm_print "  ✅ SUSFS detected in kernel"
+    if [ "$KSU_SUKISU" = "true" ]; then
+        zm_print "  ✅ SUSFS +enhanced (manager-integrated)"
+    else
+        zm_print "  ✅ SUSFS detected in kernel"
+    fi
 else
     zm_print "  ⚠️ SUSFS not detected in kernel"
 fi

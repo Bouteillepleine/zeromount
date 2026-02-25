@@ -58,9 +58,11 @@ pub fn probe_susfs() -> Result<CapabilityFlags> {
     caps.external_susfs_module = external_module;
     caps.susfs_binary_found = binary_found;
 
+    // SukiSU/ReSukiSU bundle ksu_susfs in the manager — no external module needed
+    let sukisu = std::env::var("KSU_SUKISU").map(|v| v == "true").unwrap_or(false);
+
     caps.susfs_mode = if kernel_has_susfs
-        && external_module != ExternalSusfsModule::None
-        && binary_found
+        && (external_module != ExternalSusfsModule::None || (sukisu && binary_found))
     {
         SusfsMode::Enhanced
     } else if kernel_has_susfs {
@@ -70,8 +72,8 @@ pub fn probe_susfs() -> Result<CapabilityFlags> {
     };
 
     debug!(
-        "SUSFS mode: {:?} (kernel={}, external={:?}, binary={})",
-        caps.susfs_mode, kernel_has_susfs, external_module, binary_found
+        "SUSFS mode: {:?} (kernel={}, external={:?}, binary={}, sukisu={})",
+        caps.susfs_mode, kernel_has_susfs, external_module, binary_found, sukisu
     );
 
     Ok(caps)
