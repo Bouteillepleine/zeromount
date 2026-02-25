@@ -5,10 +5,10 @@
 MODDIR="${0%/*}"
 LOG="zeromount"
 
-# Single-instance lock -- KSU metamodule mode can double-fire
+# Single-instance lock -- KSU metamodule mode can double-fire.
+# noclobber makes the redirect use O_CREAT|O_EXCL, which is atomic.
 LOCKFILE="/dev/zeromount_metamount_lock"
-[ -f "$LOCKFILE" ] && { ksud kernel notify-module-mounted 2>/dev/null; exit 0; }
-touch "$LOCKFILE"
+( set -o noclobber; > "$LOCKFILE" ) 2>/dev/null || { ksud kernel notify-module-mounted 2>/dev/null; exit 0; }
 
 echo "$LOG: metamount.sh entered (post-fs-data)" > /dev/kmsg 2>/dev/null
 

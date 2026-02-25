@@ -1,4 +1,3 @@
-use std::ffi::CString;
 use std::fs;
 use std::path::Path;
 
@@ -45,24 +44,13 @@ fn mark_opaque_recursive(base: &Path, current: &Path, lower_dir: &Path) -> Resul
     Ok(())
 }
 
+// overlayfs respects trusted.overlay.opaque ONLY on the upperdir, not on lowerdirs.
+// For lowerdir-only (read-only) overlay, the correct mechanism is the whiteout
+// marker file .wh..wh..opq inside the directory, which overlayfs recognises in
+// any lower layer (fs/overlayfs/namei.c ovl_lookup_index checks for this).
 fn set_opaque_xattr(dir: &Path) -> Result<()> {
-    let path_cstr =
-        CString::new(dir.to_string_lossy().as_bytes()).context("invalid path for xattr")?;
-    let name = CString::new("trusted.overlay.opaque").unwrap();
-    let val = b"y";
-    // SAFETY: CStrings are non-null NUL-terminated; val is a stack-allocated byte literal.
-    let ret = unsafe {
-        libc::lsetxattr(
-            path_cstr.as_ptr(),
-            name.as_ptr(),
-            val.as_ptr() as *const libc::c_void,
-            val.len(),
-            0,
-        )
-    };
-    if ret != 0 {
-        let err = std::io::Error::last_os_error();
-        anyhow::bail!("lsetxattr trusted.overlay.opaque on {}: {err}", dir.display());
-    }
+    let marker = dir.join(".wh..wh..opq");
+    fs::File::create(&marker)
+        .with_context(|| format!("create opaque marker {}", marker.display()))?;
     Ok(())
 }
