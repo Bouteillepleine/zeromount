@@ -25,17 +25,6 @@ else
     echo "$LOG: kernel_umount deferred to external module ($EXTERNAL_SUSFS)" > /dev/kmsg 2>/dev/null
 fi
 
-# Android settings toggles — require framework, immediate on toggle via webUI
-case "$("$BIN" config get adb.developer_options 2>/dev/null)" in
-    true)  settings put global development_settings_enabled 1 ;;
-    false) settings put global development_settings_enabled 0 ;;
-esac
-
-case "$("$BIN" config get adb.usb_debugging 2>/dev/null)" in
-    true)  settings put global adb_enabled 1 ;;
-    false) settings put global adb_enabled 0 ;;
-esac
-
 # Emoji needs pm (package manager), only available post-boot
 "$BIN" emoji apply-apps 2>/dev/null || true
 

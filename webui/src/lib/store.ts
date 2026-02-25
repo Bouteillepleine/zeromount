@@ -927,7 +927,6 @@ function createAppStore() {
     if (dump?.adb) {
       const a = dump.adb;
       const adb: Partial<AdbSettings> = {};
-      // Handle backward compat: old configs may still use hide_usb_debugging
       if ('usb_debugging' in a) {
         adb.usb_debugging = typeof a.usb_debugging === 'boolean' ? a.usb_debugging : String(a.usb_debugging) === 'true';
       } else if ('hide_usb_debugging' in a) {
@@ -940,18 +939,39 @@ function createAppStore() {
         }
       }
       setSettings('adb', prev => ({ ...prev, ...adb }));
-      return;
+    } else {
+      const keys: (keyof AdbSettings)[] = ['usb_debugging', 'developer_options', 'adb_root'];
+      const results = await Promise.allSettled(keys.map(k => api.configGet(`adb.${k}`)));
+      const adb: Partial<AdbSettings> = {};
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value !== null) {
+          adb[keys[i]] = r.value === 'true';
+        }
+      });
+      setSettings('adb', prev => ({ ...prev, ...adb }));
     }
 
-    const keys: (keyof AdbSettings)[] = ['usb_debugging', 'developer_options', 'adb_root'];
-    const results = await Promise.allSettled(keys.map(k => api.configGet(`adb.${k}`)));
-    const adb: Partial<AdbSettings> = {};
-    results.forEach((r, i) => {
-      if (r.status === 'fulfilled' && r.value !== null) {
-        adb[keys[i]] = r.value === 'true';
+    // developer_options and usb_debugging: read live device state
+    // so toggles reflect reality, not stale config
+    const [devResult, usbResult] = await Promise.allSettled([
+      ksuExec('settings get global development_settings_enabled'),
+      ksuExec('settings get global adb_enabled'),
+    ]);
+    const live: Partial<AdbSettings> = {};
+    if (devResult.status === 'fulfilled') {
+      const val = devResult.value.stdout?.trim();
+      if (val === '1' || val === '0') live.developer_options = val === '1';
+    }
+    if (usbResult.status === 'fulfilled') {
+      const val = usbResult.value.stdout?.trim();
+      if (val === '1' || val === '0') live.usb_debugging = val === '1';
+    }
+    if (Object.keys(live).length) {
+      setSettings('adb', prev => ({ ...prev, ...live }));
+      for (const [key, val] of Object.entries(live)) {
+        api.configSet(`adb.${key}`, String(val)).catch(() => {});
       }
-    });
-    setSettings('adb', prev => ({ ...prev, ...adb }));
+    }
   };
 
   const loadMountSettings = async (dump?: Record<string, any> | null) => {
