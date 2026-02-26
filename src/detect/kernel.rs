@@ -1,4 +1,3 @@
-use std::io::Read;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -9,11 +8,10 @@ use crate::vfs::ioctls;
 
 const VFS_DEVICE: &str = "/dev/zeromount";
 const SYSFS_DIR: &str = "/sys/kernel/zeromount";
-const PROC_CONFIG: &str = "/proc/config.gz";
 
 /// Probe kernel for VFS driver availability and version.
 /// DET02: (1) /dev/zeromount existence, (2) GET_VERSION ioctl,
-/// (3) /sys/kernel/zeromount/ sysfs, (4) /proc/config.gz check
+/// (3) /sys/kernel/zeromount/ sysfs
 pub fn probe_vfs_driver() -> Result<CapabilityFlags> {
     let mut caps = CapabilityFlags::default();
 
@@ -70,15 +68,6 @@ pub fn probe_vfs_driver() -> Result<CapabilityFlags> {
         }
     }
 
-    // Step 4: /proc/config.gz for CONFIG_ZEROMOUNT (only if version unknown)
-    if caps.vfs_version.is_none() {
-        if let Ok(has_config) = check_proc_config() {
-            if has_config {
-                debug!("CONFIG_ZEROMOUNT=y found in /proc/config.gz");
-            }
-        }
-    }
-
     // Probe overlay/erofs/tmpfs for fallback awareness
     caps.overlay_supported = check_overlay_support().unwrap_or(false);
     caps.erofs_supported = check_erofs_support().unwrap_or(false);
@@ -99,33 +88,6 @@ pub fn probe_sysfs() -> Result<Option<u32>> {
     let version: u32 = content.trim().parse()
         .context("parsing sysfs version")?;
     Ok(Some(version))
-}
-
-/// Check /proc/config.gz for CONFIG_ZEROMOUNT=y.
-fn check_proc_config() -> Result<bool> {
-    let path = Path::new(PROC_CONFIG);
-    if !path.exists() {
-        return Ok(false);
-    }
-
-    let file = std::fs::File::open(path)
-        .context("opening /proc/config.gz")?;
-
-    // /proc/config.gz is gzip-compressed; read raw and search
-    // On Android, this file may not exist or may require root.
-    // We do a best-effort check -- read first 256KB and search.
-    let mut buf = Vec::with_capacity(262144);
-    let mut reader = std::io::BufReader::new(file);
-    reader.read_to_end(&mut buf).context("reading /proc/config.gz")?;
-
-    // Search for CONFIG_ZEROMOUNT in the compressed data.
-    // The string will appear as plain ASCII even in gzip since
-    // kernel config values are not compressed individually, but
-    // this is a best-effort heuristic. If the file is truly gzip,
-    // we'd need flate2 -- but we avoid adding a dependency for
-    // a step-4 fallback check that rarely triggers.
-    let needle = b"CONFIG_ZEROMOUNT=y";
-    Ok(buf.windows(needle.len()).any(|w| w == needle))
 }
 
 /// Check if OverlayFS is supported by probing /proc/filesystems.

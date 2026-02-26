@@ -113,7 +113,6 @@ pub fn apply_brene(
 
     let has_path = client.features().path && susfs_cfg.path_hide;
     let has_maps = client.features().maps && susfs_cfg.maps_hide;
-    let _has_open_redirect = client.features().open_redirect && susfs_cfg.open_redirect;
     let _has_kstat = client.features().kstat && susfs_cfg.kstat;
 
     // -- Additive ops: always RUN (idempotent, kernel deduplicates) --
@@ -517,8 +516,6 @@ fn fix_font_selinux_contexts(font_dir: &Path) {
     }
 }
 
-/// Overlay-mode font hiding: kstat + path_hide only, no open_redirect.
-/// When overlay already mounted /system/fonts, SUSFS open_redirect would conflict.
 fn hide_font_modules_overlay(client: &SusfsClient) -> Vec<FontModuleInfo> {
     let modules_dir = Path::new(MODULES_DIR);
     if !modules_dir.is_dir() {
@@ -1100,7 +1097,6 @@ mod tests {
     #[test]
     fn process_font_modules_returns_empty_when_no_modules_dir() {
         let client = SusfsClient::new_for_test(true, SusfsFeatures {
-            open_redirect: true,
             kstat: true,
             path: true,
             ..SusfsFeatures::default()

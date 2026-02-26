@@ -75,7 +75,7 @@ declare -A ABI_TARGET=(
 )
 
 setup_toolchain() {
-    NDK_BIN="/opt/android-ndk-r25b/toolchains/llvm/prebuilt/linux-x86_64/bin"
+    export NDK_BIN="/opt/android-ndk-r25b/toolchains/llvm/prebuilt/linux-x86_64/bin"
     if [ ! -d "$NDK_BIN" ]; then
         echo "FATAL: Android NDK not found at /opt/android-ndk-r25b" >&2
         exit 1

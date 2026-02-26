@@ -128,8 +128,6 @@ pub struct SusfsConfig {
     pub path_hide: bool,
     #[serde(default = "default_true")]
     pub maps_hide: bool,
-    #[serde(default = "default_true")]
-    pub open_redirect: bool,
 }
 
 impl Default for SusfsConfig {
@@ -139,7 +137,6 @@ impl Default for SusfsConfig {
             kstat: true,
             path_hide: true,
             maps_hide: true,
-            open_redirect: true,
         }
     }
 }
@@ -506,7 +503,6 @@ impl ZeroMountConfig {
             "susfs.kstat" => Some(self.susfs.kstat.to_string()),
             "susfs.path_hide" => Some(self.susfs.path_hide.to_string()),
             "susfs.maps_hide" => Some(self.susfs.maps_hide.to_string()),
-            "susfs.open_redirect" => Some(self.susfs.open_redirect.to_string()),
 
             // brene.*
             "brene.auto_hide_apk" => Some(self.brene.auto_hide_apk.to_string()),
@@ -581,7 +577,6 @@ impl ZeroMountConfig {
             "susfs.kstat" => self.susfs.kstat = value.parse()?,
             "susfs.path_hide" => self.susfs.path_hide = value.parse()?,
             "susfs.maps_hide" => self.susfs.maps_hide = value.parse()?,
-            "susfs.open_redirect" => self.susfs.open_redirect = value.parse()?,
 
             // brene.*
             "brene.auto_hide_apk" => self.brene.auto_hide_apk = value.parse()?,

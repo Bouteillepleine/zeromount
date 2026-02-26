@@ -6,18 +6,15 @@ use tracing::{debug, info};
 use crate::core::types::{
     ModuleFileType, MountPlan, MountResult, MountStrategy, ScannedModule,
 };
-use crate::susfs::SusfsClient;
-
 use super::VfsDriver;
 
 pub struct VfsExecutor {
     driver: VfsDriver,
-    susfs: Option<SusfsClient>,
 }
 
 impl VfsExecutor {
-    pub fn new(driver: VfsDriver, susfs: Option<SusfsClient>) -> Self {
-        Self { driver, susfs }
+    pub fn new(driver: VfsDriver) -> Self {
+        Self { driver }
     }
 
     /// Execute the full VFS pipeline for a set of scanned modules.
@@ -51,10 +48,6 @@ impl VfsExecutor {
     }
 
     /// Hot-reload: CLEAR_ALL + re-inject all rules.
-    ///
-    /// CO01: Both del_rule AND clear_all leak dirs_ht entries. Hot-reload uses
-    /// CLEAR_ALL + full re-inject, which is acceptable since hot-reload is rare.
-    /// CO03: CLEAR_ALL + re-inject eliminates stale ghost directory entries.
     #[allow(dead_code)] // Wired when watcher triggers VFS re-inject
     pub fn hot_reload(
         &self,
@@ -77,7 +70,6 @@ impl VfsExecutor {
     fn inject_module_rules(&self, module: &ScannedModule) -> MountResult {
         let mut applied = 0u32;
         let mut failed = 0u32;
-        let mut brene_deferred = 0u32;
         let mut mount_paths = Vec::new();
         let mut error = None;
 
@@ -118,15 +110,6 @@ impl VfsExecutor {
                 }
             };
 
-            if let Some(ref susfs) = self.susfs {
-                if susfs.features().open_redirect && is_brene_owned_target(&target) {
-                    if !is_dir {
-                        brene_deferred += 1;
-                    }
-                    continue;
-                }
-            }
-
             match self.driver.add_rule(&target, &source, is_dir) {
                 Ok(()) => {
                     applied += 1;
@@ -148,18 +131,13 @@ impl VfsExecutor {
             }
         }
 
-        // Font-only module: all regular files deferred to BRENE, none injected into VFS
-        let (strategy, success, rules) = if applied == 0 && brene_deferred > 0 {
-            (MountStrategy::Font, true, brene_deferred)
-        } else {
-            (MountStrategy::Vfs, failed == 0 && applied > 0, applied)
-        };
+        let (strategy, success, rules) =
+            (MountStrategy::Vfs, failed == 0 && applied > 0, applied);
 
         debug!(
             module = %module.id,
             applied,
             failed,
-            brene_deferred,
             "module rule injection done"
         );
 

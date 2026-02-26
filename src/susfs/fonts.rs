@@ -18,7 +18,6 @@ const ASSET_EXTENSIONS: &[&str] = &["png", "zlib", "ogg"];
 pub struct FontRedirectResult {
     pub target: String,
     pub replacement: String,
-    pub open_redirect: bool,
     pub kstat_redirect: bool,
     pub path_hidden: bool,
 }
@@ -26,7 +25,6 @@ pub struct FontRedirectResult {
 /// Redirect a single font file using stock SUSFS ioctls.
 ///
 /// Strategy: kstat spoof (redirect or static fallback) + sus_path hide.
-/// open_redirect_all is not used — kernel patch not stable yet.
 pub fn redirect_font_file(
     client: &SusfsClient,
     target: &str,
@@ -35,7 +33,6 @@ pub fn redirect_font_file(
     let mut result = FontRedirectResult {
         target: target.to_string(),
         replacement: replacement.to_string(),
-        open_redirect: false,
         kstat_redirect: false,
         path_hidden: false,
     };
@@ -142,7 +139,7 @@ pub fn redirect_font_directory(
         }
     }
 
-    let success_count = results.iter().filter(|r| r.open_redirect).count();
+    let success_count = results.iter().filter(|r| r.kstat_redirect || r.path_hidden).count();
     info!(
         "font directory redirect: {}/{} successful from {}",
         success_count,
@@ -343,11 +340,9 @@ mod tests {
         let r = FontRedirectResult {
             target: "/system/fonts/Roboto.ttf".to_string(),
             replacement: "/data/adb/modules/font_mod/system/fonts/Roboto.ttf".to_string(),
-            open_redirect: false,
             kstat_redirect: false,
             path_hidden: false,
         };
-        assert!(!r.open_redirect);
         assert!(!r.kstat_redirect);
         assert!(!r.path_hidden);
     }
@@ -413,7 +408,6 @@ mod tests {
 
         // SUSFS unavailable -> redirect_font_module should attempt overlay
         assert!(!client.is_available());
-        assert!(!client.features().open_redirect);
         // The actual overlay mount will fail in test (no kernel), but the
         // decision to fall back is verified by the feature check path
     }

@@ -1,12 +1,10 @@
+use std::ffi::CString;
 use std::fs;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use tracing::{debug, warn};
 
-/// Walk a module's system directory looking for `.replace` markers.
-/// For each directory with a `.replace` file, set `trusted.overlay.opaque=y`
-/// on the corresponding directory in the staging lower dir.
 pub fn mark_opaque_dirs(module_system_dir: &Path, lower_dir: &Path) -> Result<()> {
     mark_opaque_recursive(module_system_dir, module_system_dir, lower_dir)
 }
@@ -44,13 +42,28 @@ fn mark_opaque_recursive(base: &Path, current: &Path, lower_dir: &Path) -> Resul
     Ok(())
 }
 
-// overlayfs respects trusted.overlay.opaque ONLY on the upperdir, not on lowerdirs.
-// For lowerdir-only (read-only) overlay, the correct mechanism is the whiteout
-// marker file .wh..wh..opq inside the directory, which overlayfs recognises in
-// any lower layer (fs/overlayfs/namei.c ovl_lookup_index checks for this).
+// ovl_is_opaquedir() checks trusted.overlay.opaque on both upper and lower layers
 fn set_opaque_xattr(dir: &Path) -> Result<()> {
-    let marker = dir.join(".wh..wh..opq");
-    fs::File::create(&marker)
-        .with_context(|| format!("create opaque marker {}", marker.display()))?;
+    let c_path = CString::new(dir.to_str().context("non-UTF8 path")?)
+        .context("path contains NUL")?;
+    let c_name = CString::new("trusted.overlay.opaque").unwrap();
+    let val = b"y";
+
+    let ret = unsafe {
+        libc::lsetxattr(
+            c_path.as_ptr(),
+            c_name.as_ptr(),
+            val.as_ptr() as *const libc::c_void,
+            val.len(),
+            0,
+        )
+    };
+    if ret != 0 {
+        bail!(
+            "lsetxattr on {}: {}",
+            dir.display(),
+            std::io::Error::last_os_error()
+        );
+    }
     Ok(())
 }

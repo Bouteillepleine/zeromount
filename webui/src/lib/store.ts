@@ -2,7 +2,7 @@ import { createSignal, createRoot, createMemo, createEffect } from 'solid-js';
 import { createStore } from 'solid-js/store';
 import type { Tab, Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo, Settings, InstalledApp, KsuModule, CapabilityFlags, ModuleStatus, BreneSettings, SusfsSettings, PerfSettings, EmojiSettings, AdbSettings, UnameSettings, UnameMode, MountSettings, StorageMode, MountStrategy, WebUiInitResponse, SusfsOwnership, BridgeValues } from './types';
 import { api, shouldUseMock } from './api';
-import { listPackages, getPackagesInfo, getAppLabelViaAapt } from './ksuApi';
+import { listPackages, getPackagesInfo, getAppLabelViaAapt, ksuExec } from './ksuApi';
 import { darkTheme, lightTheme, amoledTheme, applyTheme, getAccentStyles, accentPresets, accentNames } from './theme';
 import { readCache, writeCache, type HydratableState } from './cache';
 
@@ -123,7 +123,6 @@ function createAppStore() {
     path_hide: true,
     kstat: true,
     maps_hide: true,
-    open_redirect: true,
   };
 
   const defaultUname: UnameSettings = {
@@ -883,7 +882,7 @@ function createAppStore() {
     if (dump?.susfs) {
       const s = dump.susfs;
       const susfs: Partial<SusfsSettings> = {};
-      for (const key of ['enabled', 'path_hide', 'kstat', 'maps_hide', 'open_redirect'] as (keyof SusfsSettings)[]) {
+      for (const key of ['enabled', 'path_hide', 'kstat', 'maps_hide'] as (keyof SusfsSettings)[]) {
         if (key in s) {
           const v = s[key];
           susfs[key] = typeof v === 'boolean' ? v : String(v) === 'true';
@@ -893,7 +892,7 @@ function createAppStore() {
       return;
     }
 
-    const keys: (keyof SusfsSettings)[] = ['enabled', 'path_hide', 'kstat', 'maps_hide', 'open_redirect'];
+    const keys: (keyof SusfsSettings)[] = ['enabled', 'path_hide', 'kstat', 'maps_hide'];
     const results = await Promise.allSettled(keys.map(k => api.configGet(`susfs.${k}`)));
     const susfs: Partial<SusfsSettings> = {};
     keys.forEach((key, i) => {

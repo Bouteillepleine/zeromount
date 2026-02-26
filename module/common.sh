@@ -32,12 +32,13 @@ susfs_hexpatch_prop_name() {
     fi
 
     if [ -f "$PROPFILE" ]; then
-        NAME=${NAME##*.}
+        local LAST_OFFSET=""
         while true; do
-            local NAMEOFFSET=$(echo $(strings -t d "$PROPFILE" | grep "$NAME") | cut -d ' ' -f 1)
-            if [ -z "${NAMEOFFSET}" ]; then
+            local NAMEOFFSET=$(strings -t d "$PROPFILE" | grep -m1 -F "$NAME" | cut -d ' ' -f 1)
+            if [ -z "$NAMEOFFSET" ] || [ "$NAMEOFFSET" = "$LAST_OFFSET" ]; then
                 break
             fi
+            LAST_OFFSET="$NAMEOFFSET"
             local NEWSTR=$(echo "$NAME" | sed 's/'"$CURVALUE"'/'"$NEWVALUE"'/g')
             local NAMELEN=${#NAME}
             local NEWHEX=$(printf "$NEWSTR" | od -A n -t x1 -v | tr -d ' \n')

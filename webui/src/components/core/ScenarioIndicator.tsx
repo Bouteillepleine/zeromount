@@ -75,9 +75,7 @@ function getMissingCapabilities(caps: CapabilityFlags | null): string[] {
   if (!caps.susfs_kstat) missing.push('kstat');
   if (!caps.susfs_path) missing.push('path');
   if (!caps.susfs_maps) missing.push('maps');
-  if (!caps.susfs_open_redirect) missing.push('open_redirect');
   if (!caps.susfs_kstat_redirect) missing.push('kstat_redirect');
-  if (!caps.susfs_open_redirect_all) missing.push('open_redirect_all');
   return missing;
 }
 

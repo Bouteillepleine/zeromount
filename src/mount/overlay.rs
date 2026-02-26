@@ -137,30 +137,26 @@ pub fn mount_overlay(
     }
 }
 
-/// Build the lowerdir= option string. The target (original) directory goes last
-/// so module files take precedence in the overlay stack.
 fn build_lowerdir_string(lower_dirs: &[&Path], target: &Path, decoy_dir: Option<&Path>) -> String {
     let mut parts: Vec<String> = Vec::new();
 
-    // Decoy as highest-priority layer (first in overlay stack, hides staging paths)
     if let Some(decoy) = decoy_dir {
         parts.push(escape_overlay_path(&decoy.to_string_lossy()));
     }
 
-    // Module staging directories
     parts.extend(
         lower_dirs
             .iter()
             .map(|p| escape_overlay_path(&p.to_string_lossy())),
     );
 
-    // Original filesystem content as the bottom layer
     parts.push(escape_overlay_path(&target.to_string_lossy()));
 
     parts.join(":")
 }
 
-/// Escape colons and backslashes in overlay path options (legacy API requirement).
+// ovl_split_lowerdirs (5.10) and ovl_parse_param_split_lowerdirs (6.6) both
+// consume backslash escapes — same string works for legacy mount(2) and fsopen.
 fn escape_overlay_path(path: &str) -> String {
     path.replace('\\', "\\\\").replace(':', "\\:").replace(',', "\\,")
 }
@@ -170,7 +166,6 @@ fn escape_overlay_path(path: &str) -> String {
 fn mount_overlay_new_api(lowerdir: &str, target: &Path, overlay_source: &str) -> Result<()> {
     let c_fstype = CString::new("overlay")?;
 
-    // fsopen("overlay", 0)
     // SAFETY: CString is non-null NUL-terminated; syscall args are valid constants.
     let fs_fd = unsafe { libc::syscall(syscall_nr::SYS_FSOPEN, c_fstype.as_ptr(), 0x01u32) };
     if fs_fd < 0 {

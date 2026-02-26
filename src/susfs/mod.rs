@@ -21,9 +21,7 @@ pub struct SusfsFeatures {
     pub kstat: bool,
     pub path: bool,
     pub maps: bool,
-    pub open_redirect: bool,
     pub kstat_redirect: bool,
-    pub open_redirect_all: bool,
 }
 
 /// Client for SUSFS kernel operations via KSU supercall.
@@ -65,7 +63,6 @@ impl SusfsClient {
         debug!("probe baseline: {:?}", baseline);
 
         client.features.kstat_redirect = probe_kstat_redirect(&baseline);
-        client.features.open_redirect_all = probe_open_redirect_all(&baseline);
 
         debug!("SUSFS features: {:?}", client.features);
 
@@ -286,52 +283,6 @@ impl SusfsClient {
         check_err(info.err, "add_sus_kstat_redirect")
     }
 
-    // ---- Open redirect ----
-
-    pub fn add_open_redirect(&self, target: &str, redirected: &str) -> Result<()> {
-        self.ensure_available()?;
-        let meta = fs::metadata(target)
-            .with_context(|| format!("stat failed for '{target}'"))?;
-
-        let mut info = StSusfsOpenRedirect {
-            target_ino: meta.ino(),
-            target_pathname: [0u8; SUSFS_MAX_LEN_PATHNAME],
-            redirected_pathname: [0u8; SUSFS_MAX_LEN_PATHNAME],
-            err: ERR_CMD_NOT_SUPPORTED,
-        };
-        copy_path_to_buf(&mut info.target_pathname, target);
-        copy_path_to_buf(&mut info.redirected_pathname, redirected);
-
-        self.do_supercall(SusfsCommand::AddOpenRedirect, &mut info as *mut _ as *mut u8)?;
-        check_err(info.err, "add_open_redirect")
-    }
-
-    /// All-UID open redirect (custom 0x555c1). No CLI handler in upstream ksu_susfs.
-    /// Falls back to per-UID add_open_redirect if unavailable.
-    pub fn add_open_redirect_all(&self, target: &str, redirected: &str) -> Result<()> {
-        self.ensure_available()?;
-
-        if !self.features.open_redirect_all {
-            debug!("open_redirect_all unavailable, falling back to add_open_redirect");
-            return self.add_open_redirect(target, redirected);
-        }
-
-        let meta = fs::metadata(target)
-            .with_context(|| format!("stat failed for '{target}'"))?;
-
-        let mut info = StSusfsOpenRedirect {
-            target_ino: meta.ino(),
-            target_pathname: [0u8; SUSFS_MAX_LEN_PATHNAME],
-            redirected_pathname: [0u8; SUSFS_MAX_LEN_PATHNAME],
-            err: ERR_CMD_NOT_SUPPORTED,
-        };
-        copy_path_to_buf(&mut info.target_pathname, target);
-        copy_path_to_buf(&mut info.redirected_pathname, redirected);
-
-        self.do_supercall(SusfsCommand::AddOpenRedirectAll, &mut info as *mut _ as *mut u8)?;
-        check_err(info.err, "add_open_redirect_all")
-    }
-
     // ---- Maps hiding ----
 
     pub fn add_sus_map(&self, map_path: &str) -> Result<()> {
@@ -413,13 +364,14 @@ impl SusfsClient {
             bail!("cmdline content exceeds max size ({SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE})");
         }
 
-        let mut info = StSusfsSpoofCmdline {
+        // 8KB struct — heap-allocate for consistency with query_enabled_features
+        let mut info = Box::new(StSusfsSpoofCmdline {
             fake_cmdline_or_bootconfig: [0u8; SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE],
             err: ERR_CMD_NOT_SUPPORTED,
-        };
+        });
         copy_path_to_buf(&mut info.fake_cmdline_or_bootconfig, fake_content);
 
-        self.do_supercall(SusfsCommand::SetCmdline, &mut info as *mut _ as *mut u8)?;
+        self.do_supercall(SusfsCommand::SetCmdline, info.as_mut() as *mut _ as *mut u8)?;
         check_err(info.err, "set_cmdline")
     }
 
@@ -554,9 +506,7 @@ fn parse_features(features_str: &str) -> SusfsFeatures {
         path: features_str.contains("CONFIG_KSU_SUSFS_SUS_PATH"),
         maps: features_str.contains("CONFIG_KSU_SUSFS_SUS_MAPS")
             || features_str.contains("CONFIG_KSU_SUSFS_SUS_MAP"),
-        open_redirect: features_str.contains("CONFIG_KSU_SUSFS_OPEN_REDIRECT"),
         kstat_redirect: false,
-        open_redirect_all: false,
     }
 }
 
@@ -650,32 +600,6 @@ fn probe_kstat_redirect(baseline: &ProbeBaseline) -> bool {
     }
 }
 
-fn probe_open_redirect_all(baseline: &ProbeBaseline) -> bool {
-    let mut info = StSusfsOpenRedirect {
-        target_ino: PROBE_CANARY,
-        target_pathname: [0u8; SUSFS_MAX_LEN_PATHNAME],
-        redirected_pathname: [0u8; SUSFS_MAX_LEN_PATHNAME],
-        err: PROBE_ERR_SENTINEL,
-    };
-    copy_path_to_buf(&mut info.target_pathname, "/__zm_probe__");
-
-    match supercall(SusfsCommand::AddOpenRedirectAll, &mut info as *mut _ as *mut u8) {
-        Err(errno) => {
-            debug!("probe open_redirect_all (0x555c1): syscall failed (errno {errno})");
-            false
-        }
-        Ok(ret) => {
-            let result = interpret_probe_result(info.err, info.target_ino, baseline);
-            debug!(
-                "probe open_redirect_all (0x555c1): ret={}, err={}, canary={:#X}, baseline={:?} → {}",
-                ret, info.err, info.target_ino, baseline,
-                if result { "SUPPORTED" } else { "NOT SUPPORTED" }
-            );
-            result
-        }
-    }
-}
-
 fn interpret_probe_result(err: i32, canary_field: u64, baseline: &ProbeBaseline) -> bool {
     match baseline {
         ProbeBaseline::SyscallFails => {
@@ -732,34 +656,26 @@ mod tests {
     fn parse_features_stock_kernel() {
         let features = "CONFIG_KSU_SUSFS_SUS_PATH=y\n\
                         CONFIG_KSU_SUSFS_SUS_KSTAT=y\n\
-                        CONFIG_KSU_SUSFS_SUS_MAPS=y\n\
-                        CONFIG_KSU_SUSFS_OPEN_REDIRECT=y\n";
+                        CONFIG_KSU_SUSFS_SUS_MAPS=y\n";
         let f = parse_features(features);
         assert!(f.path);
         assert!(f.kstat);
         assert!(f.maps);
-        assert!(f.open_redirect);
         assert!(!f.kstat_redirect);
-        assert!(!f.open_redirect_all);
     }
 
     #[test]
     fn parse_features_ignores_custom_commands() {
         // Custom zeromount features are detected via active probing, not string matching.
-        // Even if the strings appeared, parse_features must return false for them.
         let features = "CONFIG_KSU_SUSFS_SUS_PATH=y\n\
                         CONFIG_KSU_SUSFS_SUS_KSTAT=y\n\
                         CONFIG_KSU_SUSFS_SUS_MAPS=y\n\
-                        CONFIG_KSU_SUSFS_OPEN_REDIRECT=y\n\
-                        CONFIG_KSU_SUSFS_SUS_KSTAT_REDIRECT=y\n\
-                        CONFIG_KSU_SUSFS_OPEN_REDIRECT_ALL=y\n";
+                        CONFIG_KSU_SUSFS_SUS_KSTAT_REDIRECT=y\n";
         let f = parse_features(features);
         assert!(f.path);
         assert!(f.kstat);
         assert!(f.maps);
-        assert!(f.open_redirect);
         assert!(!f.kstat_redirect, "custom features come from active probing only");
-        assert!(!f.open_redirect_all, "custom features come from active probing only");
     }
 
     #[test]
@@ -769,7 +685,6 @@ mod tests {
         assert!(f.path);
         assert!(!f.kstat);
         assert!(!f.maps);
-        assert!(!f.open_redirect);
     }
 
     #[test]
@@ -778,7 +693,6 @@ mod tests {
         assert!(!f.path);
         assert!(!f.kstat);
         assert!(!f.maps);
-        assert!(!f.open_redirect);
     }
 
     #[test]
@@ -820,9 +734,7 @@ mod tests {
         assert!(!f.kstat);
         assert!(!f.path);
         assert!(!f.maps);
-        assert!(!f.open_redirect);
         assert!(!f.kstat_redirect);
-        assert!(!f.open_redirect_all);
     }
 
     // -- FFI helper tests --
@@ -868,8 +780,7 @@ mod tests {
     }
 
     // -- Fallback behavior tests (F14) --
-    // These verify the feature-gating logic that controls kstat_redirect
-    // and open_redirect_all fallback paths.
+    // These verify the feature-gating logic that controls kstat_redirect fallback.
 
     #[test]
     fn features_without_kstat_redirect_triggers_fallback_path() {
@@ -877,40 +788,20 @@ mod tests {
             kstat: true,
             path: true,
             maps: true,
-            open_redirect: true,
             kstat_redirect: false,
-            open_redirect_all: false,
         };
         assert!(!features.kstat_redirect);
         assert!(features.kstat);
     }
 
     #[test]
-    fn features_without_open_redirect_all_triggers_fallback_path() {
-        let features = SusfsFeatures {
-            kstat: true,
-            path: true,
-            maps: true,
-            open_redirect: true,
-            kstat_redirect: true,
-            open_redirect_all: false,
-        };
-        assert!(!features.open_redirect_all);
-        assert!(features.open_redirect);
-    }
-
-    #[test]
     fn parse_features_base_still_matches_from_custom_substrings() {
         // CONFIG_KSU_SUSFS_SUS_KSTAT_REDIRECT contains CONFIG_KSU_SUSFS_SUS_KSTAT
-        // as prefix — base features still match via substring even though custom
-        // features are no longer derived from strings
-        let features = "CONFIG_KSU_SUSFS_SUS_KSTAT_REDIRECT=y\n\
-                        CONFIG_KSU_SUSFS_OPEN_REDIRECT_ALL=y\n";
+        // as prefix — base features still match via substring
+        let features = "CONFIG_KSU_SUSFS_SUS_KSTAT_REDIRECT=y\n";
         let f = parse_features(features);
         assert!(f.kstat, "base kstat matches from KSTAT_REDIRECT substring");
         assert!(!f.kstat_redirect, "custom features need active probing");
-        assert!(f.open_redirect, "base redirect matches from REDIRECT_ALL substring");
-        assert!(!f.open_redirect_all, "custom features need active probing");
     }
 
     #[test]
@@ -942,24 +833,6 @@ mod tests {
         // Without custom: must have base kstat for static fallback
         assert!(!without_custom.kstat_redirect);
         assert!(without_custom.kstat);
-    }
-
-    #[test]
-    fn fallback_chain_open_redirect_all_to_per_uid() {
-        let with_all = SusfsFeatures {
-            open_redirect_all: true,
-            open_redirect: true,
-            ..SusfsFeatures::default()
-        };
-        let without_all = SusfsFeatures {
-            open_redirect_all: false,
-            open_redirect: true,
-            ..SusfsFeatures::default()
-        };
-
-        assert!(with_all.open_redirect_all);
-        assert!(!without_all.open_redirect_all);
-        assert!(without_all.open_redirect);
     }
 
     // -- Probe interpretation tests --

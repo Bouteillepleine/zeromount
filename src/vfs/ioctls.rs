@@ -1,4 +1,3 @@
-use std::ffi::CString;
 use std::fs::OpenOptions;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
@@ -171,27 +170,8 @@ impl VfsDriver {
 
     /// Delete a VFS rule by virtual path.
     pub fn del_rule(&self, source: &Path, target: &Path) -> Result<()> {
-        let vp = CString::new(
-            source
-                .to_str()
-                .ok_or_else(|| IoctlError::InvalidPath(source.display().to_string()))?,
-        )
-        .map_err(|_| IoctlError::InvalidPath(source.display().to_string()))?;
-
-        let rp = CString::new(
-            target
-                .to_str()
-                .ok_or_else(|| IoctlError::InvalidPath(target.display().to_string()))?,
-        )
-        .map_err(|_| IoctlError::InvalidPath(target.display().to_string()))?;
-
-        let mut data = IoctlData {
-            virtual_path: vp.as_ptr(),
-            real_path: rp.as_ptr(),
-            flags: 0,
-            #[cfg(target_pointer_width = "64")]
-            _pad: 0,
-        };
+        let rule = VfsRule::new(source, target, false)?;
+        let mut data = rule.as_ioctl_data();
         // SAFETY: fd is a valid open descriptor from VfsDriver::open; data is a valid mutable pointer.
         unsafe {
             raw_ioctl(
@@ -203,7 +183,7 @@ impl VfsDriver {
         Ok(())
     }
 
-    /// Clear all rules. NOTE: leaks dirs_ht entries per CO01.
+    /// Clear all rules.
     pub fn clear_all(&self) -> Result<()> {
         // SAFETY: fd is a valid open descriptor from VfsDriver::open; null arg is valid for CLEAR_ALL.
         unsafe {

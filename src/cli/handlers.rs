@@ -55,9 +55,7 @@ pub fn handle_detect() -> Result<()> {
         println!("  kstat: {}", result.capabilities.susfs_kstat);
         println!("  path: {}", result.capabilities.susfs_path);
         println!("  maps: {}", result.capabilities.susfs_maps);
-        println!("  open_redirect: {}", result.capabilities.susfs_open_redirect);
         println!("  kstat_redirect: {}", result.capabilities.susfs_kstat_redirect);
-        println!("  open_redirect_all: {}", result.capabilities.susfs_open_redirect_all);
     }
     println!("overlay: {}", result.capabilities.overlay_supported);
     println!("tmpfs_xattr: {}", result.capabilities.tmpfs_xattr);
@@ -296,10 +294,9 @@ pub fn handle_susfs(feature: &str, state: &str) -> Result<()> {
         "kstat" => "susfs.kstat",
         "path" | "path_hide" => "susfs.path_hide",
         "maps" | "maps_hide" => "susfs.maps_hide",
-        "redirect" | "open_redirect" => "susfs.open_redirect",
         "enabled" => "susfs.enabled",
         "log" => "brene.susfs_log",
-        _ => anyhow::bail!("unknown SUSFS feature: {feature} (try: kstat, path, maps, redirect, enabled, log)"),
+        _ => anyhow::bail!("unknown SUSFS feature: {feature} (try: kstat, path, maps, enabled, log)"),
     };
 
     config.set(key, state)?;

@@ -130,17 +130,6 @@ pub struct StSusfsSpoofCmdline {
     pub err: i32,
 }
 
-/// add_open_redirect / add_open_redirect_all
-/// C: struct st_susfs_open_redirect (main.c:156-161)
-#[repr(C)]
-#[derive(Clone)]
-pub struct StSusfsOpenRedirect {
-    pub target_ino: u64,
-    pub target_pathname: [u8; SUSFS_MAX_LEN_PATHNAME],
-    pub redirected_pathname: [u8; SUSFS_MAX_LEN_PATHNAME],
-    pub err: i32,
-}
-
 /// add_sus_map
 /// C: struct st_susfs_sus_map (main.c:163-166)
 #[repr(C)]
@@ -283,14 +272,6 @@ mod tests {
     fn sus_map_layout() {
         // C: char[256] + int (4) = 260
         assert_eq!(mem::size_of::<StSusfsSusMap>(), 260);
-    }
-
-    #[test]
-    fn open_redirect_layout() {
-        // C: unsigned long (8) + char[256] + char[256] + int (4) = 524 content
-        // + 4 bytes trailing padding for 8-byte alignment (due to u64 field) = 528
-        let size = mem::size_of::<StSusfsOpenRedirect>();
-        assert_eq!(size, 528);
     }
 
     #[test]

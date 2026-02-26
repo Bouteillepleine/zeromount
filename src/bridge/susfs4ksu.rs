@@ -18,7 +18,6 @@ pub const TXT_FILES: &[&str] = &[
     "sus_path_loop.txt",
     "sus_mount.txt",
     "try_umount.txt",
-    "sus_open_redirect.txt",
 ];
 
 pub fn read_config(dir: &Path) -> Result<HashMap<String, String>> {

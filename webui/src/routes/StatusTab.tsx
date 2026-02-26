@@ -408,7 +408,7 @@ export function StatusTab() {
             <span class="status-mode__value color-text-accent">
               {store.systemInfo.susfsVersion && store.systemInfo.susfsVersion !== 'N/A'
                 ? `${store.systemInfo.susfsVersion} (${
-                    store.capabilities?.()?.susfs_kstat_redirect && store.capabilities?.()?.susfs_open_redirect_all
+                    store.capabilities?.()?.susfs_kstat_redirect
                       ? 'Extended' : 'Stock'
                   })`
                 : 'Unavailable'}
@@ -531,7 +531,7 @@ export function StatusTab() {
             </div>
             <div class="status-health__message color-text-secondary">
               {store.settings.susfs.enabled
-                ? (store.capabilities?.()?.susfs_kstat_redirect && store.capabilities?.()?.susfs_open_redirect_all
+                ? (store.capabilities?.()?.susfs_kstat_redirect
                     ? 'Extended kernel — all features available'
                     : 'Stock kernel — custom commands unavailable')
                 : store.systemInfo.susfsVersion && store.systemInfo.susfsVersion !== 'N/A'
@@ -548,9 +548,7 @@ export function StatusTab() {
                     { key: 'kstat', active: caps.susfs_kstat },
                     { key: 'path', active: caps.susfs_path },
                     { key: 'maps', active: caps.susfs_maps },
-                    { key: 'open_redirect', active: caps.susfs_open_redirect },
                     { key: 'kstat_redirect', active: caps.susfs_kstat_redirect },
-                    { key: 'open_redirect_all', active: caps.susfs_open_redirect_all },
                   ];
                   return (
                     <For each={features}>

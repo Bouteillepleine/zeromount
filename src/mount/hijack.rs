@@ -21,8 +21,6 @@ pub struct MountInfoEntry {
 #[derive(Debug)]
 pub enum HijackAction {
     VfsReplaced,
-    VfsAndSusfs,
-    SusfsReplaced,
     Skipped,
 }
 
@@ -48,7 +46,7 @@ pub struct SweepSummary {
 pub fn sweep(
     scenario: Scenario,
     capabilities: &CapabilityFlags,
-    susfs_config: &SusfsConfig,
+    _susfs_config: &SusfsConfig,
     mount_results: &[MountResult],
 ) -> SweepSummary {
     let entries = match parse_mountinfo() {
@@ -99,7 +97,6 @@ pub fn sweep(
     }
 
     let has_vfs = capabilities.vfs_driver;
-    let has_susfs = susfs_config.enabled && capabilities.susfs_available;
 
     let driver = if has_vfs {
         match crate::vfs::VfsDriver::open() {
@@ -113,17 +110,8 @@ pub fn sweep(
         None
     };
 
-    let susfs = if has_susfs && capabilities.susfs_open_redirect {
-        match crate::susfs::SusfsClient::probe() {
-            Ok(c) if c.is_available() => Some(c),
-            _ => None,
-        }
-    } else {
-        None
-    };
-
-    if driver.is_none() && susfs.is_none() {
-        debug!("sweep: neither VFS nor SUSFS available for replacement");
+    if driver.is_none() {
+        debug!("sweep: VFS driver not available for replacement");
         let results: Vec<HijackResult> = rogues
             .iter()
             .map(|e| HijackResult {
@@ -142,7 +130,7 @@ pub fn sweep(
     let mut skipped = 0u32;
 
     for entry in &rogues {
-        let result = hijack_mount(entry, driver.as_ref(), susfs.as_ref());
+        let result = hijack_mount(entry, driver.as_ref());
         if result.success {
             hijacked += 1;
         } else {
@@ -226,7 +214,6 @@ fn resolve_source_path(entry: &MountInfoEntry) -> String {
 fn hijack_mount(
     entry: &MountInfoEntry,
     driver: Option<&crate::vfs::VfsDriver>,
-    susfs: Option<&crate::susfs::SusfsClient>,
 ) -> HijackResult {
     let source = resolve_source_path(entry);
     let target = &entry.mount_point;
@@ -282,29 +269,7 @@ fn hijack_mount(
             };
         }
 
-        if let Some(s) = susfs {
-            if s.features().open_redirect_all {
-                if let Err(e) = s.add_open_redirect_all(target, &source) {
-                    debug!("sweep: SUSFS redirect for {target} failed (non-fatal): {e}");
-                }
-                HijackAction::VfsAndSusfs
-            } else {
-                HijackAction::VfsReplaced
-            }
-        } else {
-            HijackAction::VfsReplaced
-        }
-    } else if let Some(s) = susfs {
-        if let Err(e) = s.add_open_redirect_all(target, &source) {
-            return HijackResult {
-                mount_point: target.clone(),
-                source,
-                action: HijackAction::Skipped,
-                success: false,
-                error: Some(format!("SUSFS redirect: {e}")),
-            };
-        }
-        HijackAction::SusfsReplaced
+        HijackAction::VfsReplaced
     } else {
         return HijackResult {
             mount_point: target.clone(),

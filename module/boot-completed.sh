@@ -35,6 +35,11 @@ fi
 
 # vold-app-data: wait for FUSE sdcard like susfs4ksu
 if [ "$("$BIN" config get brene.emulate_vold_app_data 2>/dev/null)" = "true" ]; then
-    until [ -d "/sdcard/Android/data" ]; do sleep 1; done
-    "$BIN" vold-app-data 2>/dev/null || true
+    # 60-second timeout in case FUSE never mounts (no sdcard, encryption failure)
+    _waited=0
+    until [ -d "/sdcard/Android/data" ] || [ $_waited -ge 60 ]; do
+        sleep 1
+        _waited=$((_waited + 1))
+    done
+    [ -d "/sdcard/Android/data" ] && "$BIN" vold-app-data 2>/dev/null || true
 fi
