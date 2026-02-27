@@ -29,7 +29,9 @@ if [ "$PROP_SPOOF" = "true" ] || [ "$HIDE_USB" = "true" ]; then
         {
             while true; do
                 "$BIN" prop-watch
-                echo "zeromount: prop-watch exited ($?), restarting" > /dev/kmsg 2>/dev/null
+                rc=$?
+                [ $rc -eq 0 ] && break
+                echo "zeromount: prop-watch crashed ($rc), restarting" > /dev/kmsg 2>/dev/null
                 sleep 1
             done
         } &
