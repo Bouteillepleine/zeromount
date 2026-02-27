@@ -1,6 +1,6 @@
 [package]
 name = "zeromount"
-version = "2.0.89-dev"
+version = "2.0.91-dev"
 edition = "2021"
 
 [dependencies]
@@ -15,6 +15,7 @@ anyhow = "= 1.0.101"
 thiserror = "= 2.0.18"
 libc = "= 0.2.180"
 rand = "= 0.8.5"
+zip = { version = "= 8.1.0", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tempfile = "3"
