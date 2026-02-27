@@ -167,6 +167,38 @@ build_axon() {
     echo "==> [axon] All targets built"
 }
 
+build_zygisk() {
+    local src="$PROJECT_ROOT/external/prop-spoof"
+    if [ ! -f "$src/CMakeLists.txt" ]; then
+        echo "WARN: prop-spoof source not found, skipping Zygisk build" >&2
+        return 0
+    fi
+
+    local ndk_root="/opt/android-ndk-r25b"
+    local cmake_toolchain="$ndk_root/build/cmake/android.toolchain.cmake"
+    local cmake_bin
+    cmake_bin=$(command -v cmake 2>/dev/null || echo "$ndk_root/cmake/bin/cmake")
+
+    local abis=(arm64-v8a armeabi-v7a)
+    for abi in "${abis[@]}"; do
+        local build_dir="$PROJECT_ROOT/target/zygisk/$abi"
+        mkdir -p "$build_dir"
+
+        echo "==> [zygisk] Building $abi"
+        "$cmake_bin" -B "$build_dir" -S "$src" \
+            -DCMAKE_TOOLCHAIN_FILE="$cmake_toolchain" \
+            -DANDROID_ABI="$abi" \
+            -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_BUILD_TYPE=Release
+
+        "$cmake_bin" --build "$build_dir" -j"$(nproc)"
+
+        mkdir -p "$MODULE_DIR/zygisk"
+        cp "$build_dir/libprop_spoof.so" "$MODULE_DIR/zygisk/${abi}.so"
+    done
+    echo "==> [zygisk] All targets built"
+}
+
 # Package one ZIP from a given Rust profile
 package_zip() {
     local profile="$1"
@@ -238,6 +270,11 @@ package_zip() {
             for so in "$MODULE_DIR/lib/$abi"/libaxon_init.so "$MODULE_DIR/lib/$abi"/libaxon_adbd.so; do
                 [ -f "$so" ] && cp "$so" "$staging/lib/$abi/"
             done
+        fi
+
+        if [ -f "$MODULE_DIR/zygisk/${abi}.so" ]; then
+            mkdir -p "$staging/zygisk"
+            cp "$MODULE_DIR/zygisk/${abi}.so" "$staging/zygisk/"
         fi
     done
 
@@ -335,6 +372,7 @@ if [ "$BUILD" = true ]; then
     build_rust "release"
 
     build_axon
+    build_zygisk
 
     if [ -f "$WEBUI_DIR/package.json" ]; then
         echo "==> Building WebUI"
