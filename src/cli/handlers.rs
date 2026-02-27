@@ -315,6 +315,10 @@ pub fn handle_perf() -> Result<()> {
     crate::perf::run_perf()
 }
 
+pub fn handle_prop_watch() -> Result<()> {
+    crate::prop::run_prop_watch()
+}
+
 pub fn handle_watch() -> Result<()> {
     let modules_dir = Path::new("/data/adb/modules");
     tracing::info!("starting module watcher on {}", modules_dir.display());
