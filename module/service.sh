@@ -90,23 +90,16 @@ fi
 # Track background PIDs for cleanup
 _bg_pids=""
 
-# Supplemental enforcer — primary spoof runs in post-fs-data.sh before Zygote fork.
-# This handles USB HAL events that reset sys.usb.* props at runtime after boot_completed.
-hide_usb_debugging() {
+# Cosmetic prop spoofing — hides debug build fingerprints without affecting ADB/USB functionality.
+# Per-app ADB hiding requires Zygisk hooks (Java) and kernel patches (procfs/sysfs).
+spoof_cosmetic_debug_props() {
     ENABLED=$("$BIN" config get adb.invisible_debugging 2>/dev/null)
     if [ "$ENABLED" != "true" ]; then
         echo "zeromount: invisible_debugging disabled, skipping" > /dev/kmsg 2>/dev/null
         return 0
     fi
+    command -v resetprop >/dev/null 2>&1 || return 1
 
-    if ! command -v resetprop >/dev/null 2>&1; then
-        echo "zeromount: resetprop not found, skipping USB debug hiding" > /dev/kmsg 2>/dev/null
-        return 1
-    fi
-
-    echo "zeromount: hide_usb_debugging starting" > /dev/kmsg 2>/dev/null
-
-    # Dynamic prop discovery from build.prop files
     PROP_FILE="/data/adb/zeromount/.hide_debug_props"
     rm -f "$PROP_FILE"
     _dyn_count=0
@@ -124,20 +117,8 @@ hide_usb_debugging() {
         resetprop --file "$PROP_FILE" 2>/dev/null
         rm -f "$PROP_FILE"
     fi
-    echo "zeromount: dynamic props overridden: ${_dyn_count}" > /dev/kmsg 2>/dev/null
-
-    resetprop -n init.svc.adbd stopped
-    resetprop -n service.adb.root 0
-    resetprop -n service.adb.tcp.port -1
-    resetprop -n persist.service.adb.enable 0
-    resetprop -n persist.vendor.usb.config none
-    resetprop -n vendor.usb.config none
 
     resetprop -n ro.debuggable 0
-    resetprop -n persist.sys.debuggable 0
-    resetprop -n persist.service.debuggerd.enable 0
-    resetprop -n dalvik.vm.checkjni false
-    resetprop -n ro.kernel.android.checkjni 0
     resetprop -n ro.boot.vbmeta.device_state locked
     resetprop -n ro.boot.verifiedbootstate green
     resetprop -n ro.boot.flash.locked 1
@@ -146,27 +127,9 @@ hide_usb_debugging() {
     resetprop -n ro.boot.mode normal
     resetprop -n ro.bootmode normal
 
-    echo "zeromount: static debug props set (19 props via resetprop -n)" > /dev/kmsg 2>/dev/null
-
-    # USB props + adbd loop: must wait for boot_completed so USB HAL is stable
-    {
-        while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 1; done
-        echo "zeromount: boot completed, spoofing USB props" > /dev/kmsg 2>/dev/null
-        while true; do
-            resetprop -n persist.sys.usb.config mtp
-            resetprop -n sys.usb.config mtp
-            resetprop -n sys.usb.state mtp
-            resetprop -n sys.usb.ffs.ready 0
-            resetprop -n sys.usb.ffs.adb.ready 0
-            resetprop -n persist.sys.usb.reboot.func mtp
-            resetprop -n init.svc.adbd stopped
-            sleep 2
-        done
-    } &
-    _bg_pids="$_bg_pids $!"
-    echo "zeromount: USB spoof + adbd loop started (pid $!)" > /dev/kmsg 2>/dev/null
+    echo "zeromount: cosmetic debug props set (${_dyn_count} dynamic + 8 static)" > /dev/kmsg 2>/dev/null
 }
-hide_usb_debugging
+spoof_cosmetic_debug_props
 
 # Performance tuning + input boost daemon (Rust-native, auto-detects device)
 if [ "$("$BIN" config get perf.enabled 2>/dev/null)" = "true" ]; then

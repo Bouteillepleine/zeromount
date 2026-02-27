@@ -7,28 +7,21 @@ MODDIR="${0%/*}"
 
 "$BIN" detect
 
-spoof_usb_debug_early() {
+spoof_cosmetic_props() {
     [ "$("$BIN" config get adb.invisible_debugging 2>/dev/null)" = "true" ] || return 0
+    command -v resetprop >/dev/null 2>&1 || return 1
 
-    if ! command -v resetprop >/dev/null 2>&1; then
-        echo "zeromount: resetprop not found, skipping early USB debug spoof" > /dev/kmsg 2>/dev/null
-        return 1
-    fi
+    # Cosmetic only — doesn't affect USB/ADB functionality
+    resetprop -n ro.debuggable 0
+    resetprop -n ro.boot.vbmeta.device_state locked
+    resetprop -n ro.boot.verifiedbootstate green
+    resetprop -n ro.boot.flash.locked 1
+    resetprop -n ro.boot.warranty_bit 0
+    resetprop -n ro.warranty_bit 0
 
-    # Spoof before Zygote fork so app property snapshots see clean values
-    resetprop -n init.svc.adbd stopped
-    resetprop -n persist.sys.usb.config mtp
-    resetprop -n sys.usb.config mtp
-    resetprop -n sys.usb.state mtp
-    resetprop -n sys.usb.ffs.ready 0
-    resetprop -n sys.usb.ffs.adb.ready 0
-    resetprop -n service.adb.root 0
-    resetprop -n service.adb.tcp.port -1
-    resetprop -n persist.service.adb.enable 0
-
-    echo "zeromount: early USB debug spoof applied (pre-Zygote)" > /dev/kmsg 2>/dev/null
+    echo "zeromount: cosmetic debug props applied (pre-Zygote)" > /dev/kmsg 2>/dev/null
 }
-spoof_usb_debug_early
+spoof_cosmetic_props
 
 # Magisk has no metamount.sh — run mount pipeline here
 if [ -z "$KSU" ] && [ -z "$APATCH" ]; then
