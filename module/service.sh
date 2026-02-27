@@ -127,9 +127,11 @@ hide_usb_debugging() {
     echo "zeromount: dynamic props overridden: ${_dyn_count}" > /dev/kmsg 2>/dev/null
 
     resetprop -n init.svc.adbd stopped
+    resetprop -n init.svc_debug_pid.adbd ""
     resetprop -n service.adb.root 0
     resetprop -n service.adb.tcp.port -1
     resetprop -n persist.service.adb.enable 0
+    resetprop -n persist.adb.tcp.port ""
     resetprop -n persist.vendor.usb.config none
     resetprop -n vendor.usb.config none
 
@@ -152,6 +154,9 @@ hide_usb_debugging() {
     {
         while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 1; done
         echo "zeromount: boot completed, spoofing USB props" > /dev/kmsg 2>/dev/null
+        settings put global adb_enabled 0
+        settings put global development_settings_enabled 0
+        settings put global adb_wifi_enabled 0
         while true; do
             resetprop -n persist.sys.usb.config mtp
             resetprop -n sys.usb.config mtp

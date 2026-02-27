@@ -17,6 +17,7 @@ spoof_usb_debug_early() {
 
     # Spoof before Zygote fork so app property snapshots see clean values
     resetprop -n init.svc.adbd stopped
+    resetprop -n init.svc_debug_pid.adbd ""
     resetprop -n persist.sys.usb.config mtp
     resetprop -n sys.usb.config mtp
     resetprop -n sys.usb.state mtp
@@ -25,10 +26,17 @@ spoof_usb_debug_early() {
     resetprop -n service.adb.root 0
     resetprop -n service.adb.tcp.port -1
     resetprop -n persist.service.adb.enable 0
+    resetprop -n persist.adb.tcp.port ""
+    resetprop -n persist.vendor.usb.config none
+    resetprop -n vendor.usb.config none
 
     echo "zeromount: early USB debug spoof applied (pre-Zygote)" > /dev/kmsg 2>/dev/null
 }
 spoof_usb_debug_early
+
+# Prevent untrusted apps from enumerating adbd via /proc
+[ "$("$BIN" config get adb.hide_usb_debugging 2>/dev/null)" = "true" ] && \
+    mount -o remount,hidepid=2 /proc 2>/dev/null || true
 
 # Magisk has no metamount.sh — run mount pipeline here
 if [ -z "$KSU" ] && [ -z "$APATCH" ]; then
