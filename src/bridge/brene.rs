@@ -9,10 +9,10 @@ use crate::core::config::ZeroMountConfig;
 
 use super::translate;
 
-pub const BASE_DIR: &str = "/data/adb/brene";
-pub const CONFIG_FILE: &str = "config.sh";
+pub(super) const BASE_DIR: &str = "/data/adb/brene";
+pub(super) const CONFIG_FILE: &str = "config.sh";
 
-pub const TXT_FILES: &[&str] = &[
+pub(super) const TXT_FILES: &[&str] = &[
     "custom_sus_path.txt",
     "custom_sus_map.txt",
     "custom_sus_path_loop.txt",
@@ -20,7 +20,7 @@ pub const TXT_FILES: &[&str] = &[
 
 const CONFIG_PREFIX: &str = "config_";
 
-pub fn read_config(dir: &Path) -> Result<HashMap<String, String>> {
+pub(super) fn read_config(dir: &Path) -> Result<HashMap<String, String>> {
     let path = dir.join(CONFIG_FILE);
     let file = fs::File::open(&path)
         .with_context(|| format!("opening {}", path.display()))?;
@@ -42,7 +42,7 @@ pub fn read_config(dir: &Path) -> Result<HashMap<String, String>> {
     Ok(map)
 }
 
-pub fn write_config(dir: &Path, config: &ZeroMountConfig) -> Result<()> {
+pub(super) fn write_config(dir: &Path, config: &ZeroMountConfig) -> Result<()> {
     let keys = config_to_keys(config);
     let path = dir.join(CONFIG_FILE);
 
@@ -62,7 +62,7 @@ pub fn write_config(dir: &Path, config: &ZeroMountConfig) -> Result<()> {
     Ok(())
 }
 
-pub fn merge_config(
+pub(super) fn merge_config(
     dir: &Path,
     config: &ZeroMountConfig,
     existing: &HashMap<String, String>,
@@ -138,7 +138,7 @@ pub fn merge_config(
     Ok(())
 }
 
-pub fn ensure_txt_files(dir: &Path) -> Result<()> {
+pub(super) fn ensure_txt_files(dir: &Path) -> Result<()> {
     for name in TXT_FILES {
         let path = dir.join(name);
         if !path.exists() {
@@ -150,7 +150,7 @@ pub fn ensure_txt_files(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn config_to_keys(config: &ZeroMountConfig) -> HashMap<String, String> {
+fn config_to_keys(config: &ZeroMountConfig) -> HashMap<String, String> {
     let mut m = HashMap::with_capacity(20);
 
     // 18 bridged keys per spec Section 3b (keys stored WITHOUT config_ prefix)
@@ -186,7 +186,7 @@ pub fn config_to_keys(config: &ZeroMountConfig) -> HashMap<String, String> {
     m
 }
 
-pub fn apply_keys_to_config(keys: &HashMap<String, String>, config: &mut ZeroMountConfig) -> bool {
+pub(super) fn apply_keys_to_config(keys: &HashMap<String, String>, config: &mut ZeroMountConfig) -> bool {
     let mut changed = false;
 
     if let Some(v) = keys.get("enable_avc_log_spoofing") {

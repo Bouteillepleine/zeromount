@@ -448,7 +448,7 @@ pub fn handle_try_umount() -> Result<()> {
 
 const SENTINEL_PATH: &str = "/data/adb/zeromount/flags/external_susfs";
 
-pub fn read_sentinel_module() -> crate::core::types::ExternalSusfsModule {
+fn read_sentinel_module() -> crate::core::types::ExternalSusfsModule {
     use crate::core::types::ExternalSusfsModule;
 
     std::fs::read_to_string(SENTINEL_PATH)
