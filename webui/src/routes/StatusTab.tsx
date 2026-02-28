@@ -15,6 +15,7 @@ export function StatusTab() {
   const [animatedMaps, setAnimatedMaps] = createSignal(0);
   const [showAllActivity, setShowAllActivity] = createSignal(false);
   const [showAllModules, setShowAllModules] = createSignal(false);
+  const [showAllPaths, setShowAllPaths] = createSignal(false);
 
   const displayStrategy = createMemo(() => {
     return store.runtimeStrategy() || store.effectiveStrategy();
@@ -492,8 +493,19 @@ export function StatusTab() {
             </div>
           </div>
         </div>
-        <div class="status-mount__paths-label color-text-tertiary">
-          Redirected Paths
+        <div class="status-mount__paths-header">
+          <div class="status-mount__paths-label color-text-tertiary">
+            Redirected Paths
+          </div>
+          <Show when={pathChips().length > 5}>
+            <button
+              onClick={() => setShowAllPaths(!showAllPaths())}
+              class="status-activity__toggle"
+              style={{ color: store.currentTheme().textAccent }}
+            >
+              {showAllPaths() ? 'Show Less' : `+${pathChips().length - 5} more`}
+            </button>
+          </Show>
         </div>
         <Show
           when={pathChips().length > 0}
@@ -504,7 +516,7 @@ export function StatusTab() {
           }
         >
           <div class="status-mount__paths">
-            <For each={pathChips()}>
+            <For each={pathChips().slice(0, showAllPaths() ? undefined : 5)}>
               {(path) => (
                 <div class="status-mount__chip bg-surface color-text-primary">
                   {path}
