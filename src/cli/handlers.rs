@@ -190,11 +190,6 @@ pub fn handle_config(action: ConfigAction) -> Result<()> {
         ConfigAction::Set { key, value } => {
             config.set(&key, &value)?;
             config.save()?;
-            if key == "adb.hide_usb_debugging" {
-                if let Ok(client) = crate::susfs::SusfsClient::probe() {
-                    crate::susfs::brene::apply_hide_usb_debugging(&client, config.adb.hide_usb_debugging);
-                }
-            }
             println!("ok");
         }
         ConfigAction::Restore => {
