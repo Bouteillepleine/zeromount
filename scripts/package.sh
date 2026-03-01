@@ -283,19 +283,6 @@ package_zip() {
         cp -r "$MODULE_DIR/emoji" "$staging/emoji"
     fi
 
-    local _has_zygisk=false
-    for _za in arm64-v8a armeabi-v7a x86 x86_64; do
-        if [ -f "$MODULE_DIR/zygisk/$_za.so" ]; then
-            mkdir -p "$staging/zygisk"
-            cp "$MODULE_DIR/zygisk/$_za.so" "$staging/zygisk/"
-            _has_zygisk=true
-        fi
-    done
-    if [ "$_has_zygisk" = true ]; then
-        [ -f "$MODULE_DIR/classes.dex" ] && cp "$MODULE_DIR/classes.dex" "$staging/"
-        [ -d "$MODULE_DIR/packages" ] && cp -r "$MODULE_DIR/packages" "$staging/"
-    fi
-
     # META-INF
     mkdir -p "$staging/META-INF/com/google/android"
     cat > "$staging/META-INF/com/google/android/update-binary" << 'UPDATER'
@@ -335,18 +322,10 @@ UPDATER
         lkm_count=$(ls "$MODULE_DIR/lkm"/*.ko 2>/dev/null | wc -l)
     fi
 
-    local zygisk_status="absent"
-    local _zs=()
-    for _za in arm64-v8a armeabi-v7a x86 x86_64; do
-        [ -f "$MODULE_DIR/zygisk/$_za.so" ] && _zs+=("$_za")
-    done
-    [ ${#_zs[@]} -gt 0 ] && zygisk_status="${_zs[*]}"
-
     echo "    Output:  $out_path"
     echo "    Size:    $(du -h "$out_path" | cut -f1)"
     echo "    Bins:    $found_bins/4"
     echo "    WebUI:   present"
-    echo "    Zygisk:  $zygisk_status"
     echo "    LKM:     $lkm_count kernel modules"
 }
 
@@ -361,24 +340,6 @@ if [ "$BUILD" = true ]; then
     build_rust "release"
 
     build_axon
-
-    if [ -f "$MODULE_DIR/zygisk-hook/gradlew" ]; then
-        echo "==> Building Zygisk hook (ZygoteLoader + AndroidVMTools)"
-        (cd "$MODULE_DIR/zygisk-hook" && ./gradlew :hook:assembleRelease --no-daemon -q)
-        _gradle_zip="$MODULE_DIR/zygisk-hook/hook/build/outputs/magisk/release/ZeroMountHook.zip"
-        if [ -f "$_gradle_zip" ]; then
-            mkdir -p "$MODULE_DIR/zygisk"
-            _extract="$(mktemp -d)"
-            unzip -o "$_gradle_zip" "zygisk/*" "classes*.dex" "packages/*" -d "$_extract" >/dev/null
-            cp "$_extract/zygisk/"*.so "$MODULE_DIR/zygisk/"
-            cp "$_extract/"classes*.dex "$MODULE_DIR/"
-            [ -d "$_extract/packages" ] && cp -r "$_extract/packages" "$MODULE_DIR/"
-            rm -rf "$_extract"
-            echo "==> Zygisk hook built"
-        else
-            echo "WARN: Zygisk hook build output not found" >&2
-        fi
-    fi
 
     if [ -f "$WEBUI_DIR/package.json" ]; then
         echo "==> Building WebUI"

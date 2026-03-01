@@ -8,8 +8,6 @@ MODDIR="${0%/*}"
 "$BIN" detect
 
 mkdir -p /data/adb/zeromount/flags
-echo -n "" > /data/adb/zeromount/flags/zygisk_status
-chmod 666 /data/adb/zeromount/flags/zygisk_status
 
 # Magisk has no metamount.sh — run mount pipeline here
 if [ -z "$KSU" ] && [ -z "$APATCH" ]; then

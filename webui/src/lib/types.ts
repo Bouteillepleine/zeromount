@@ -84,7 +84,6 @@ export interface RuntimeStatus {
   mount_source: string | null;
   resolved_storage_mode: string | null;
   emoji_applied?: boolean;
-  zygisk_hook_active?: boolean | null;
 }
 
 export interface KsuModule {

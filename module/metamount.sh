@@ -24,8 +24,6 @@ fi
 . "$MODDIR/common.sh"
 
 mkdir -p /data/adb/zeromount/flags
-echo -n "" > /data/adb/zeromount/flags/zygisk_status
-chmod 666 /data/adb/zeromount/flags/zygisk_status
 
 # Reconcile external SUSFS module config changes made outside zeromount
 EXTERNAL=$(cat /data/adb/zeromount/flags/external_susfs 2>/dev/null || echo none)

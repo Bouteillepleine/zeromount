@@ -102,10 +102,6 @@ pub fn build_runtime_status() -> crate::core::types::RuntimeState {
         state.root_manager = Some(mgr.name().to_string());
     }
 
-    state.zygisk_hook_active = std::fs::read_to_string("/data/adb/zeromount/flags/zygisk_status")
-        .ok()
-        .map(|s| s.trim() == "active");
-
     state
 }
 

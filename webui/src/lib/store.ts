@@ -57,7 +57,6 @@ function createAppStore() {
   const [degraded, setDegraded] = createSignal(false);
   const [degradationReason, setDegradationReason] = createSignal<string | null>(null);
   const [rootManager, setRootManager] = createSignal<string | null>(null);
-  const [zygiskHookActive, setZygiskHookActive] = createSignal<boolean | null>(null);
   const [runtimeStrategy, setRuntimeStrategy] = createSignal<MountStrategy | null>(null);
   const [mountSource, _setMountSource] = createSignal<string | null>(null);
   const [resolvedStorageMode, setResolvedStorageMode] = createSignal<string | null>(null);
@@ -275,7 +274,6 @@ function createAppStore() {
     setDegraded(cached.degraded);
     setDegradationReason(cached.degradationReason);
     setRootManager(cached.rootManager);
-    setZygiskHookActive((cached as any).zygiskHookActive ?? null);
     setRuntimeStrategy(cached.runtimeStrategy);
     _setMountSource(cached.mountSource);
     setResolvedStorageMode(cached.resolvedStorageMode);
@@ -305,7 +303,6 @@ function createAppStore() {
     degraded: degraded(),
     degradationReason: degradationReason(),
     rootManager: rootManager(),
-    zygiskHookActive: zygiskHookActive(),
     runtimeStrategy: runtimeStrategy(),
     mountSource: mountSource(),
     resolvedStorageMode: resolvedStorageMode(),
@@ -335,7 +332,6 @@ function createAppStore() {
     if (s.driver_version !== null) setSystemInfo('driverVersion', `v${s.driver_version}`);
     setSystemInfo('susfsVersion', s.susfs_version || '');
     setRootManager(s.root_manager);
-    setZygiskHookActive(s.zygisk_hook_active ?? null);
     setRuntimeStrategy(s.active_strategy ?? null);
     _setMountSource(s.mount_source ?? null);
     setResolvedStorageMode(s.resolved_storage_mode ?? null);
@@ -487,7 +483,7 @@ function createAppStore() {
       if (status.driver_version !== null) setSystemInfo('driverVersion', `v${status.driver_version}`);
       setSystemInfo('susfsVersion', status.susfs_version || '');
       setRootManager(status.root_manager);
-      setZygiskHookActive(status.zygisk_hook_active ?? null);
+
       setRuntimeStrategy(status.active_strategy ?? null);
       _setMountSource(status.mount_source ?? null);
       setResolvedStorageMode(status.resolved_storage_mode ?? null);
@@ -1179,7 +1175,7 @@ function createAppStore() {
       setDegraded(status.degraded);
       setDegradationReason(status.degradation_reason);
       setRootManager(status.root_manager);
-      setZygiskHookActive(status.zygisk_hook_active ?? null);
+
       setRuntimeStrategy(status.active_strategy ?? null);
       _setMountSource(status.mount_source ?? null);
       setResolvedStorageMode(status.resolved_storage_mode ?? null);
@@ -1397,7 +1393,6 @@ function createAppStore() {
     degraded,
     degradationReason,
     rootManager,
-    zygiskHookActive,
     runtimeStrategy,
     mountSource,
     resolvedStorageMode,

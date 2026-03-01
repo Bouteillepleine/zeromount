@@ -565,7 +565,6 @@ impl MountController<Mounted> {
             root_manager: Some(self.state.root_mgr.name().to_string()),
             resolved_storage_mode: crate::mount::storage::get_resolved_storage_mode(),
             emoji_applied: false,
-            zygisk_hook_active: None,
         }
     }
 }
