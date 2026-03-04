@@ -7,6 +7,9 @@
     <img src="https://img.shields.io/badge/KernelSU-supported-green?style=for-the-badge&logo=android" alt="KernelSU">
     <img src="https://img.shields.io/badge/Telegram-community-blue?style=for-the-badge&logo=telegram" alt="Telegram">
   </p>
+  <p align="center">
+    English | 简体中文 | 繁體中文 | Türkçe | Português (Brasil) | 한국어 | Français | Bahasa Indonesia | Русский | Українська | ภาษาไทย | Tiếng Việt | Italiano | Polski | Български | 日本語 | Español | العربية | हिन्दी | Deutsch | Nederlands | Ελληνικά | Svenska | Norsk | Dansk
+  </p>
 </p>
 
 ---
