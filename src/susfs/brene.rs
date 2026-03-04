@@ -746,6 +746,10 @@ pub fn emulate_vold_app_data(client: &SusfsClient) -> u32 {
             Ok(()) => count += 1,
             Err(e) => debug!("vold_app_data: hide failed for {pkg}: {e}"),
         }
+        match client.add_sus_path_loop(&path) {
+            Ok(()) => count += 1,
+            Err(e) => debug!("vold_app_data: loop hide failed for {pkg}: {e}"),
+        }
     }
 
     count
