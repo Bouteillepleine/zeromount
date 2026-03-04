@@ -156,6 +156,31 @@ export interface AdbSettings {
   adb_root: boolean;
 }
 
+export interface GuardSettings {
+  enabled: boolean;
+  marker_threshold: number;
+  boot_timeout_secs: number;
+  zygote_watch_secs: number;
+  zygote_poll_secs: number;
+  zygote_max_restarts: number;
+  systemui_watch_secs: number;
+  systemui_poll_secs: number;
+  systemui_max_restarts: number;
+  systemui_absent_timeout_secs: number;
+  systemui_monitor_enabled: boolean;
+  allowed_modules: string[];
+  allowed_scripts: string[];
+}
+
+export interface GuardStatus {
+  enabled: boolean;
+  pfdMarkers: number;
+  svcMarkers: number;
+  threshold: number;
+  lastRecovery: string | null;
+  allowedModules: string[];
+}
+
 export type UnameMode = 'disabled' | 'static' | 'dynamic';
 
 export interface UnameSettings {
@@ -188,6 +213,7 @@ export interface Settings {
   perf: PerfSettings;
   emoji: EmojiSettings;
   adb: AdbSettings;
+  guard: GuardSettings;
 }
 
 export type Scenario = 'full' | 'susfs_frontend' | 'kernel_only' | 'susfs_only' | 'none';
@@ -205,6 +231,7 @@ export interface WebUiInitResponse {
     perf: PerfSettings;
     emoji: EmojiSettings;
     adb: AdbSettings;
+    guard: GuardSettings;
   };
   emoji_conflict: string | null;
   system_info: {
@@ -229,4 +256,5 @@ export interface WebUiInitResponse {
   }>;
   modules: KsuModule[];
   bridge_values: BridgeValues | null;
+  guard: GuardStatus;
 }
