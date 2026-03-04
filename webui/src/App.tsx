@@ -4,6 +4,7 @@ import { NavBar } from './components/layout/NavBar';
 import { Toast } from './components/layout/Toast';
 import { StatusTab } from './routes/StatusTab';
 import { store } from './lib/store';
+import { locale, RTL_LOCALES } from './lib/i18n';
 import bgClouds from './assets/bg-clouds.webp';
 
 const ModulesTab = lazy(() => import('./routes/ModulesTab').then(m => ({ default: m.ModulesTab })));
@@ -39,6 +40,7 @@ export function App() {
 
       <div
         class="app-content"
+        dir={RTL_LOCALES.has(locale()) ? 'rtl' : 'ltr'}
         style={`
           min-height: 100vh;
           min-height: 100dvh;

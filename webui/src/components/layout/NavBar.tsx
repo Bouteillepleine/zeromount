@@ -1,5 +1,6 @@
 import { For } from 'solid-js';
 import { store } from '../../lib/store';
+import { t } from '../../lib/i18n';
 import type { Tab } from '../../lib/types';
 import "./NavBar.css";
 
@@ -8,15 +9,15 @@ interface NavBarProps {
   onTabChange: (tab: Tab) => void;
 }
 
-const tabs: { id: Tab; label: string; icon: string }[] = [
-  { id: 'status', label: 'Status', icon: 'power_settings_new' },
-  { id: 'modules', label: 'Modules', icon: 'folder' },
-  { id: 'config', label: 'Config', icon: 'tune' },
-  { id: 'settings', label: 'Settings', icon: 'settings' },
+const tabDefs: { id: Tab; labelKey: string; icon: string }[] = [
+  { id: 'status', labelKey: 'nav.status', icon: 'power_settings_new' },
+  { id: 'modules', labelKey: 'nav.modules', icon: 'folder' },
+  { id: 'config', labelKey: 'nav.config', icon: 'tune' },
+  { id: 'settings', labelKey: 'nav.settings', icon: 'settings' },
 ];
 
 export function NavBar(props: NavBarProps) {
-  const tabIndex = () => tabs.findIndex(t => t.id === props.activeTab);
+  const tabIndex = () => tabDefs.findIndex(td => td.id === props.activeTab);
   const extraPadding = () => store.settings.fixedNav;
 
   return (
@@ -27,7 +28,7 @@ export function NavBar(props: NavBarProps) {
           style={{ '--tab-index': tabIndex() }}
         />
 
-        <For each={tabs}>
+        <For each={tabDefs}>
           {(tab) => (
             <button
               onClick={() => props.onTabChange(tab.id)}
@@ -57,7 +58,7 @@ export function NavBar(props: NavBarProps) {
               </span>
 
               <span class="navbar__label">
-                {tab.label}
+                {t(tab.labelKey)}
               </span>
             </button>
           )}

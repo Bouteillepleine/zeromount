@@ -6,6 +6,7 @@ import { PATHS } from './constants';
 import { listPackages, getPackagesInfo, getAppLabelViaAapt, ksuExec } from './ksuApi';
 import { darkTheme, lightTheme, amoledTheme, applyTheme, getAccentStyles, accentPresets, accentNames } from './theme';
 import { readCache, writeCache, type HydratableState } from './cache';
+import { t, loadLocale } from './i18n';
 
 function createAppStore() {
   const [activeTab, setActiveTab] = createSignal<Tab>('status');
@@ -97,6 +98,11 @@ function createAppStore() {
   const savedAccent = typeof window !== 'undefined'
     ? localStorage.getItem('zeromount-accent')
     : null;
+
+  const savedLanguage = typeof window !== 'undefined'
+    ? localStorage.getItem('zeromount-language')
+    : null;
+  if (savedLanguage) loadLocale(savedLanguage);
 
   const accentColors = Object.keys(accentPresets);
   const randomAccent = accentColors[Math.floor(Math.random() * accentColors.length)];
@@ -455,6 +461,9 @@ function createAppStore() {
       setSettings({ verboseLogging: typeof cfg.logging.verbose === 'boolean' ? cfg.logging.verbose : settings.verboseLogging });
     }
 
+    const serverLang = cfg.ui?.language;
+    if (serverLang && !savedLanguage) loadLocale(serverLang);
+
     setRules(data.rules.map((r, i) => ({
       id: r.id || String(i + 1),
       name: r.name,
@@ -607,7 +616,7 @@ function createAppStore() {
       setLastApiError(null);
     } catch (err) {
       setLastApiError({ operation: 'loadInitialData', error: err, timestamp: new Date() });
-      showToast('Failed to load data', 'error');
+      showToast(t('toast.failedLoadData'), 'error');
     } finally {
       setLoading({ status: false, rules: false, activity: false, modules: false });
     }
@@ -622,10 +631,10 @@ function createAppStore() {
     setLoading('engine', true);
     try {
       await api.toggleEngine(newState);
-      showToast(newState ? 'Engine activated' : 'Engine deactivated', 'success');
+      showToast(newState ? t('toast.engineActivated') : t('toast.engineDeactivated'), 'success');
     } catch (err) {
       setEngineActive(!newState);
-      showToast('Failed to toggle engine', 'error');
+      showToast(t('toast.failedToggleEngine'), 'error');
     } finally {
       setLoading('engine', false);
     }
@@ -633,7 +642,7 @@ function createAppStore() {
 
   const excludeUid = async (uid: number, packageName: string, appName: string) => {
     if (uid <= 0) {
-      showToast('Cannot exclude app with unknown UID', 'error');
+      showToast(t('toast.cannotExcludeUnknownUid'), 'error');
       return null;
     }
     if (pendingUidOperations.has(uid)) {
@@ -646,10 +655,10 @@ function createAppStore() {
       setExcludedUids(prev => [...prev, excluded]);
       setStats('excludedUids', s => s + 1);
       pushActivity('uid_excluded', `${appName} (UID ${uid})`);
-      showToast(`Excluded ${appName}`, 'success');
+      showToast(t('toast.excludedApp', { appName }), 'success');
       return excluded;
     } catch (err) {
-      showToast('Failed to exclude UID', 'error');
+      showToast(t('toast.failedExcludeUid'), 'error');
       throw err;
     } finally {
       pendingUidOperations.delete(uid);
@@ -659,7 +668,7 @@ function createAppStore() {
 
   const includeUid = async (uid: number) => {
     if (uid <= 0) {
-      showToast('Cannot include app with unknown UID', 'error');
+      showToast(t('toast.cannotIncludeUnknownUid'), 'error');
       return;
     }
     if (pendingUidOperations.has(uid)) {
@@ -672,9 +681,9 @@ function createAppStore() {
       setExcludedUids(prev => prev.filter(u => u.uid !== uid));
       setStats('excludedUids', s => s - 1);
       pushActivity('uid_included', `UID ${uid} included`);
-      showToast('UID included', 'success');
+      showToast(t('toast.uidIncluded'), 'success');
     } catch (err) {
-      showToast('Failed to include UID', 'error');
+      showToast(t('toast.failedIncludeUid'), 'error');
     } finally {
       pendingUidOperations.delete(uid);
       setLoading('apps', false);
@@ -688,10 +697,10 @@ function createAppStore() {
       setRules([]);
       setStats('activeRules', 0);
       pushActivity('rule_removed', 'All rules cleared');
-      showToast('All rules cleared', 'success');
+      showToast(t('toast.allRulesCleared'), 'success');
     } catch (err) {
       const msg = String(err).includes('errno') || String(err).includes('No such')
-        ? 'ZeroMount VFS unavailable' : 'Failed to clear rules';
+        ? t('toast.vfsUnavailable') : t('toast.failedClearRules');
       showToast(msg, 'error');
     } finally {
       setLoading('rules', false);
@@ -721,10 +730,10 @@ function createAppStore() {
       await api.setVerboseLogging(enabled);
       pushActivity('setting_changed', `Verbose logging → ${enabled ? 'ON' : 'OFF'}`);
       if (enabled) {
-        showToast('Rebooting in 3 seconds for verbose logging...', 'warning', 3000);
+        showToast(t('toast.rebootingVerbose'), 'warning', 3000);
         const timerId = setTimeout(async () => {
           try { await api.reboot(); }
-          catch { showToast('Reboot failed — please reboot manually', 'error'); }
+          catch { showToast(t('toast.rebootFailed'), 'error'); }
         }, 3000);
         (window as any).__zmRebootTimer = timerId;
       } else {
@@ -732,12 +741,12 @@ function createAppStore() {
           clearTimeout((window as any).__zmRebootTimer);
           (window as any).__zmRebootTimer = null;
         }
-        showToast('Verbose logging disabled.', 'info');
+        showToast(t('toast.verboseDisabled'), 'info');
         setVerboseDumpPath(null);
       }
     } catch (e) {
       setSettings({ verboseLogging: !enabled });
-      showToast('Failed to set verbose logging', 'error');
+      showToast(t('toast.failedSetVerbose'), 'error');
     }
   };
 
@@ -834,7 +843,7 @@ function createAppStore() {
 
       pushActivity('brene_toggle', `${key} → ${value ? 'ON' : 'OFF'}`);
     } catch (e) {
-      showToast(`Failed to save ${key}`, 'error');
+      showToast(t('toast.failedSaveKey', { key }), 'error');
       setSettings('brene', key, !value);
       const old = !value;
       api.configSet(`brene.${key}`, String(old)).catch(() => {});
@@ -857,7 +866,7 @@ function createAppStore() {
       await api.configSet(`brene.${key}`, value);
       pushActivity('setting_changed', `${key} → ${value || '(empty)'}`);
     } catch (e) {
-      showToast(`Failed to save ${key}`, 'error');
+      showToast(t('toast.failedSaveKey', { key }), 'error');
       setSettings('brene', key, prev);
     }
   };
@@ -868,7 +877,7 @@ function createAppStore() {
       await api.configSet(`susfs.${key}`, String(value));
       pushActivity('susfs_toggle', `${key} → ${value ? 'ON' : 'OFF'}`);
     } catch (e) {
-      showToast(`Failed to save ${key}`, 'error');
+      showToast(t('toast.failedSaveKey', { key }), 'error');
       setSettings('susfs', key, !value);
     }
   };
@@ -879,7 +888,7 @@ function createAppStore() {
       await api.configSet(`perf.${key}`, String(value));
       pushActivity('setting_changed', `perf.${key} → ${value ? 'ON' : 'OFF'}`);
     } catch (e) {
-      showToast(`Failed to save ${key}`, 'error');
+      showToast(t('toast.failedSaveKey', { key }), 'error');
       setSettings('perf', key, !value);
     }
   };
@@ -890,7 +899,7 @@ function createAppStore() {
       await api.configSet(`emoji.${key}`, String(value));
       pushActivity('setting_changed', `emoji.${key} → ${value ? 'ON' : 'OFF'}`);
     } catch (e) {
-      showToast(`Failed to save ${key}`, 'error');
+      showToast(t('toast.failedSaveKey', { key }), 'error');
       setSettings('emoji', key, !value);
     }
   };
@@ -901,7 +910,7 @@ function createAppStore() {
       await api.configSet(`adb.${key}`, String(value));
       pushActivity('setting_changed', `adb.${key} → ${value ? 'ON' : 'OFF'}`);
     } catch (e) {
-      showToast(`Failed to save ${key}`, 'error');
+      showToast(t('toast.failedSaveKey', { key }), 'error');
       setSettings('adb', key, !value);
     }
   };
@@ -913,7 +922,7 @@ function createAppStore() {
       await api.configSet(`guard.${key}`, String(value));
       pushActivity('setting_changed', `guard.${key} → ${value ? 'ON' : 'OFF'}`);
     } catch (e) {
-      showToast(`Failed to save guard.${key}`, 'error');
+      showToast(t('toast.failedSaveKey', { key: `guard.${key}` }), 'error');
       setSettings('guard', key, !value);
       if (key === 'enabled') setGuardStatus(prev => ({ ...prev, enabled: !value }));
     }
@@ -927,15 +936,15 @@ function createAppStore() {
         allowedModules: [...prev.allowedModules.filter(m => m !== name), name],
       }));
       setSettings('guard', 'allowed_modules', (prev: string[]) => [...prev.filter(m => m !== name), name]);
-      showToast(`${name} added to whitelist`, 'success');
+      showToast(t('toast.addedToWhitelist', { name }), 'success');
     } catch (e) {
-      showToast(`Failed to whitelist ${name}`, 'error');
+      showToast(t('toast.failedWhitelist', { name }), 'error');
     }
   };
 
   const guardDisallowModule = async (name: string) => {
     if (name === 'meta-zeromount') {
-      showToast('meta-zeromount cannot be removed', 'error');
+      showToast(t('toast.cannotRemoveSelf'), 'error');
       return;
     }
     try {
@@ -945,9 +954,9 @@ function createAppStore() {
         allowedModules: prev.allowedModules.filter(m => m !== name),
       }));
       setSettings('guard', 'allowed_modules', (prev: string[]) => prev.filter(m => m !== name));
-      showToast(`${name} removed from whitelist`, 'success');
+      showToast(t('toast.removedFromWhitelist', { name }), 'success');
     } catch (e) {
-      showToast(`Failed to remove ${name}`, 'error');
+      showToast(t('toast.failedRemove', { name }), 'error');
     }
   };
 
@@ -958,7 +967,7 @@ function createAppStore() {
       await api.configSet('uname.mode', mode);
       pushActivity('setting_changed', `Uname mode → ${mode}`);
     } catch (e) {
-      showToast('Failed to save uname mode', 'error');
+      showToast(t('toast.failedSaveUnameMode'), 'error');
       setSettings('uname', 'mode', prev);
     }
   };
@@ -970,7 +979,7 @@ function createAppStore() {
       await api.configSet(`uname.${field}`, value);
       pushActivity('setting_changed', `Uname ${field} → ${value || '(empty)'}`);
     } catch (e) {
-      showToast(`Failed to save uname ${field}`, 'error');
+      showToast(t('toast.failedSaveUname', { field }), 'error');
       setSettings('uname', field, prev);
     }
   };
@@ -1162,7 +1171,7 @@ function createAppStore() {
       await api.configSet('mount.storage_mode', mode);
       pushActivity('setting_changed', `Storage mode → ${mode}`);
     } catch (e) {
-      showToast('Failed to save storage mode', 'error');
+      showToast(t('toast.failedSaveStorageMode'), 'error');
       setSettings('mount', 'storage_mode', prev);
     }
   };
@@ -1174,7 +1183,7 @@ function createAppStore() {
       await api.configSet(`mount.${key}`, String(value));
       pushActivity('setting_changed', `${key} → ${value ? 'ON' : 'OFF'}`);
     } catch (e) {
-      showToast(`Failed to save ${key}`, 'error');
+      showToast(t('toast.failedSaveKey', { key }), 'error');
       setSettings('mount', key, prev);
     }
   };
@@ -1186,7 +1195,7 @@ function createAppStore() {
       await api.configSet('mount.mount_source', value);
       pushActivity('setting_changed', `Staging source → ${value}`);
     } catch (e) {
-      showToast('Failed to save mount source', 'error');
+      showToast(t('toast.failedSaveMountSource'), 'error');
       setSettings('mount', 'mount_source', prev);
     }
   };
@@ -1198,7 +1207,7 @@ function createAppStore() {
       await api.configSet('mount.overlay_source', value);
       pushActivity('setting_changed', `Overlay source → ${value}`);
     } catch (e) {
-      showToast('Failed to save overlay source', 'error');
+      showToast(t('toast.failedSaveOverlaySource'), 'error');
       setSettings('mount', 'overlay_source', prev);
     }
   };
@@ -1223,9 +1232,9 @@ function createAppStore() {
         api.configSet('mount.magic_mount_fallback', String(newMagic)),
       ]);
       pushActivity('mount_strategy_changed', `Strategy → ${strategy}`);
-      showToast('Mount strategy changed — reboot to apply', 'warning');
+      showToast(t('toast.mountStrategyChanged'), 'warning');
     } catch (e) {
-      showToast('Failed to save mount strategy', 'error');
+      showToast(t('toast.failedSaveMountStrategy'), 'error');
       setSettings('mount', 'overlay_preferred', prevOverlay);
       setSettings('mount', 'magic_mount_fallback', prevMagic);
     }
@@ -1413,7 +1422,7 @@ function createAppStore() {
       lastKnownPackages = new Set(apps.map(a => a.packageName));
       startTriggerPolling();
     } catch (err) {
-      showToast('Failed to load apps', 'error');
+      showToast(t('toast.failedLoadApps'), 'error');
     } finally {
       appFetchInProgress = false;
       setLoading('apps', false);
@@ -1426,7 +1435,7 @@ function createAppStore() {
       const mods = await api.scanKsuModules();
       setKsuModules(mods);
     } catch (err) {
-      showToast('Failed to scan modules', 'error');
+      showToast(t('toast.failedScanModules'), 'error');
     } finally {
       setLoading('modules', false);
     }
@@ -1439,10 +1448,10 @@ function createAppStore() {
         m.path === modulePath ? { ...m, isLoaded: true } : m
       ));
       setStats('activeRules', s => s + count);
-      showToast(`Loaded ${moduleName} (${count} rules)`, 'success');
+      showToast(t('toast.moduleLoaded', { moduleName, count }), 'success');
       return count;
     } catch (err) {
-      showToast(`Failed to load ${moduleName}`, 'error');
+      showToast(t('toast.failedLoadModule', { moduleName }), 'error');
       throw err;
     }
   };
@@ -1454,11 +1463,21 @@ function createAppStore() {
         m.path === modulePath ? { ...m, isLoaded: false } : m
       ));
       setStats('activeRules', s => Math.max(0, s - count));
-      showToast(`Unloaded ${moduleName} (${count} rules)`, 'success');
+      showToast(t('toast.moduleUnloaded', { moduleName, count }), 'success');
       return count;
     } catch (err) {
-      showToast(`Failed to unload ${moduleName}`, 'error');
+      showToast(t('toast.failedUnloadModule', { moduleName }), 'error');
       throw err;
+    }
+  };
+
+  const setLanguage = async (code: string) => {
+    await loadLocale(code);
+    localStorage.setItem('zeromount-language', code);
+    try {
+      await api.configSet('ui.language', code);
+    } catch {
+      showToast(t('toast.failedSaveKey', { key: 'ui.language' }), 'error');
     }
   };
 
@@ -1533,6 +1552,7 @@ function createAppStore() {
     setVerboseLogging,
     verboseDumpPath,
     showToast,
+    setLanguage,
     stopPolling: stopTriggerPolling,
   };
 }

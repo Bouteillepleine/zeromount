@@ -44,6 +44,8 @@ pub struct ZeroMountConfig {
     #[serde(default)]
     pub guard: GuardConfig,
     #[serde(default)]
+    pub ui: UiConfig,
+    #[serde(default)]
     pub per_module: HashMap<String, ModuleOverrides>,
 }
 
@@ -331,6 +333,22 @@ impl Default for AdbConfig {
     }
 }
 
+// -- UI --
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UiConfig {
+    #[serde(default = "default_language")]
+    pub language: String,
+}
+
+fn default_language() -> String { "en".to_string() }
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self { language: default_language() }
+    }
+}
+
 // -- Bootloop guard --
 
 fn default_guard_threshold() -> u32 { 2 }
@@ -427,6 +445,7 @@ impl Default for ZeroMountConfig {
             emoji: EmojiConfig::default(),
             adb: AdbConfig::default(),
             guard: GuardConfig::default(),
+            ui: UiConfig::default(),
             per_module: HashMap::new(),
         }
     }
@@ -640,6 +659,9 @@ impl ZeroMountConfig {
             "guard.allowed_modules" => Some(self.guard.allowed_modules.join(",")),
             "guard.allowed_scripts" => Some(self.guard.allowed_scripts.join(",")),
 
+            // ui.*
+            "ui.language" => Some(self.ui.language.clone()),
+
             // per_module.<id>.<field>
             k if k.starts_with("per_module.") => self.get_module_key(k),
 
@@ -730,6 +752,9 @@ impl ZeroMountConfig {
             }
             "guard.allowed_modules" => self.guard.allowed_modules = parse_csv(value),
             "guard.allowed_scripts" => self.guard.allowed_scripts = parse_csv(value),
+
+            // ui.*
+            "ui.language" => self.ui.language = value.to_string(),
 
             // per_module.<id>.<field>
             k if k.starts_with("per_module.") => self.set_module_key(k, value)?,

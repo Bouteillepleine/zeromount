@@ -5,6 +5,7 @@ import { Input } from '../components/core/Input';
 import { Badge } from '../components/core/Badge';
 import { Skeleton } from '../components/core/Skeleton';
 import { store } from '../lib/store';
+import { t } from '../lib/i18n';
 import type { KsuModule } from '../lib/types';
 import "./ModulesTab.css";
 
@@ -38,12 +39,12 @@ export function ModulesTab() {
     mod.isLoaded || isFontModule(mod) || !!getModuleStatus(mod);
 
   const badgeInfo = (mod: KsuModule): { text: string; variant: string } => {
-    if (!isEffectivelyLoaded(mod)) return { text: 'Not Loaded', variant: 'default' };
-    if (isFontModule(mod)) return { text: 'Font', variant: 'accent' };
+    if (!isEffectivelyLoaded(mod)) return { text: t('modules.notLoaded'), variant: 'default' };
+    if (isFontModule(mod)) return { text: t('modules.font'), variant: 'accent' };
     const status = getModuleStatus(mod);
-    if (status?.strategy === 'Overlay') return { text: 'Overlay', variant: 'success' };
-    if (status?.strategy === 'MagicMount') return { text: 'Magic', variant: 'success' };
-    return { text: 'Loaded', variant: 'success' };
+    if (status?.strategy === 'Overlay') return { text: t('modules.overlay'), variant: 'success' };
+    if (status?.strategy === 'MagicMount') return { text: t('modules.magic'), variant: 'success' };
+    return { text: t('modules.loaded'), variant: 'success' };
   };
 
   const filteredModules = createMemo(() => {
@@ -93,7 +94,7 @@ export function ModulesTab() {
       <div class="modules__search-row">
         <div class="modules__search-wrapper">
           <Input
-            placeholder="Search modules..."
+            placeholder={t('modules.searchPlaceholder')}
             value={searchQuery()}
             onInput={(e) => setSearchQuery(e.currentTarget.value)}
             fullWidth
@@ -113,7 +114,7 @@ export function ModulesTab() {
           loading={store.loading.modules}
           style="white-space: nowrap;"
         >
-          SCAN
+          {t('modules.scan')}
         </Button>
       </div>
 
@@ -164,7 +165,7 @@ export function ModulesTab() {
                       {mod.name}
                     </div>
                     <div class="modules__item-meta">
-                      {mod.fileCount} files
+                      {t('modules.filesCount', { count: mod.fileCount })}
                     </div>
                   </div>
 
@@ -188,7 +189,7 @@ export function ModulesTab() {
                     <div class="modules__details-inner">
                       <div>
                         <div class="modules__detail-label">
-                          Path
+                          {t('modules.path')}
                         </div>
                         <div class="modules__path-value">
                           {mod.path}
@@ -197,7 +198,7 @@ export function ModulesTab() {
 
                       <div>
                         <div class="modules__detail-label modules__detail-label--partitions">
-                          Partitions
+                          {t('modules.partitions')}
                         </div>
                         <div class="modules__partitions">
                           <For each={getPartitionBadges(mod)}>
@@ -212,17 +213,17 @@ export function ModulesTab() {
 
                       <div class="modules__stats-row">
                         <div>
-                          <span class="modules__stat-label">Files:</span>
+                          <span class="modules__stat-label">{t('modules.files')}</span>
                           <span class="modules__stat-value">
                             {mod.fileCount.toLocaleString()}
                           </span>
                         </div>
                         <div>
-                          <span class="modules__stat-label">Status:</span>
+                          <span class="modules__stat-label">{t('modules.status')}</span>
                           <span
                             class={`modules__stat-value ${isEffectivelyLoaded(mod) ? 'modules__stat-value--active' : 'modules__stat-value--inactive'}`}
                           >
-                            {isEffectivelyLoaded(mod) ? 'Active' : 'Inactive'}
+                            {isEffectivelyLoaded(mod) ? t('modules.detailActive') : t('modules.detailInactive')}
                           </span>
                         </div>
                       </div>
@@ -237,7 +238,7 @@ export function ModulesTab() {
                         }}
                         style="margin-top: 8px;"
                       >
-                        {isEffectivelyLoaded(mod) ? 'HOT UNLOAD' : 'HOT LOAD'}
+                        {isEffectivelyLoaded(mod) ? t('modules.hotUnload') : t('modules.hotLoad')}
                       </Button>
                     </div>
                   </div>
@@ -252,10 +253,10 @@ export function ModulesTab() {
                 <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/>
               </svg>
               <div class="modules__empty-title">
-                {searchQuery() ? 'No modules match your search' : 'No modules with system overlays'}
+                {searchQuery() ? t('modules.emptyNoMatch') : t('modules.emptyNoModules')}
               </div>
               <div class="modules__empty-subtitle">
-                {searchQuery() ? 'Try a different search term' : 'Install KernelSU modules with system/vendor/product directories'}
+                {searchQuery() ? t('modules.emptyHintSearch') : t('modules.emptyHintInstall')}
               </div>
             </div>
           </Show>

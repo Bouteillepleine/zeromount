@@ -6,6 +6,7 @@ import { Badge } from '../components/core/Badge';
 import { Toggle } from '../components/core/Toggle';
 import { Skeleton } from '../components/core/Skeleton';
 import { store } from '../lib/store';
+import { t } from '../lib/i18n';
 import type { InstalledApp } from '../lib/types';
 import type {} from '../lib/ksu.d.ts';
 import "./ConfigTab.css";
@@ -161,7 +162,7 @@ export function ConfigTab() {
       <div class="config__toolbar">
         <div class="config__search">
           <Input
-            placeholder="Search apps..."
+            placeholder={t('config.searchPlaceholder')}
             value={searchQuery()}
             onInput={(e) => setSearchQuery(e.currentTarget.value)}
             fullWidth
@@ -187,7 +188,7 @@ export function ConfigTab() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill={theme().colorError}>
               <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
             </svg>
-            Excluded Apps
+            {t('config.excludedApps')}
           </h3>
           <div class="config__section-right">
             <Badge variant="error" size="small">
@@ -207,14 +208,14 @@ export function ConfigTab() {
 
         <Show when={excludedExpanded()}>
           <p class="config__section-desc">
-            These apps bypass spoofing and mounts are visible - caution
+            {t('config.excludedDesc')}
           </p>
 
           <Show
             when={filteredExcluded().length > 0}
             fallback={
               <div class="config__empty">
-                {debouncedQuery() ? 'No matches' : 'No excluded apps'}
+                {debouncedQuery() ? t('config.excludedNoMatches') : t('config.excludedNone')}
               </div>
             }
           >
@@ -233,7 +234,7 @@ export function ConfigTab() {
                       onClick={(e) => { e.stopPropagation(); store.includeUid(item.uid); }}
                       style={`color: ${theme().colorError}; padding: 6px 10px;`}
                     >
-                      REMOVE
+                      {t('config.remove')}
                     </Button>
                   </div>
                 )}
@@ -249,14 +250,14 @@ export function ConfigTab() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill={theme().textAccent}>
               <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z" />
             </svg>
-            {showSystemApps() ? 'All Apps' : 'User Apps'}
+            {showSystemApps() ? t('config.allApps') : t('config.userApps')}
           </h3>
           <Badge variant="info" size="small">
             {filteredApps().length}
           </Badge>
         </div>
         <div class="config__system-toggle">
-          <span class="config__system-label">System Apps</span>
+          <span class="config__system-label">{t('config.systemApps')}</span>
           <Toggle checked={showSystemApps()} onChange={setShowSystemApps} />
         </div>
 
@@ -283,7 +284,7 @@ export function ConfigTab() {
             when={filteredApps().length > 0}
             fallback={
               <div class="config__empty">
-                {debouncedQuery() ? 'No matches' : showSystemApps() ? 'No apps found' : 'No user apps found'}
+                {debouncedQuery() ? t('config.appsNoMatches') : showSystemApps() ? t('config.appsNoAll') : t('config.appsNoUser')}
               </div>
             }
           >
@@ -296,7 +297,7 @@ export function ConfigTab() {
                       <div class="config__app-name config__app-name--with-badge">
                         {app.appName}
                         <Show when={app.isSystemApp}>
-                          <span class="config__sys-badge">SYS</span>
+                          <span class="config__sys-badge">{t('config.sysBadge')}</span>
                         </Show>
                       </div>
                       <div class="config__app-package config__app-package--small">
@@ -309,7 +310,7 @@ export function ConfigTab() {
                       onClick={() => handleExcludeApp(app)}
                       style="padding: 6px 10px;"
                     >
-                      EXCLUDE
+                      {t('config.exclude')}
                     </Button>
                   </div>
                 )}

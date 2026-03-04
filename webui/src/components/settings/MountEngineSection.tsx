@@ -4,6 +4,7 @@ import { Toggle } from '../core/Toggle';
 import { BottomSheet } from '../ui/BottomSheet';
 import { ChipSelect } from '../ui/ChipSelect';
 import { store } from '../../lib/store';
+import { t } from '../../lib/i18n';
 import type { StorageMode } from '../../lib/types';
 
 export function MountEngineSection() {
@@ -20,22 +21,22 @@ export function MountEngineSection() {
         <svg class="settings__section-icon" viewBox="0 0 24 24" fill="currentColor">
           <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 10H6v-2h8v2zm4-4H6v-2h12v2z"/>
         </svg>
-        Mount Engine
+        {t('engine.mountEngine')}
       </h3>
 
       <div class="settings__group">
-        <div class="settings__item-label">Mount Strategy</div>
+        <div class="settings__item-label">{t('engine.mountStrategy')}</div>
         <div class="settings__item-desc" style={{ "margin-bottom": "12px" }}>
           {caps()?.vfs_driver
-            ? 'VFS driver detected — auto-selects VFS when kernel driver is present'
-            : 'No VFS driver — controls overlay vs magic mount preference'}
+            ? t('engine.mountStrategyDescVfs')
+            : t('engine.mountStrategyDescNoVfs')}
         </div>
         <div class="settings__strategies">
           <button
             class={`settings__strategy${store.effectiveStrategy() === 'Vfs' ? ' settings__strategy--active' : ''}${!caps()?.vfs_driver ? ' settings__strategy--disabled' : ''}`}
             onClick={() => store.setMountStrategy('Vfs')}
             disabled={!caps()?.vfs_driver}
-            title={!caps()?.vfs_driver ? 'VFS kernel driver not available' : 'Auto: VFS when driver present, overlay/magic fallback'}
+            title={!caps()?.vfs_driver ? t('engine.titleVfsUnavailable') : t('engine.titleVfsAuto')}
           >
             <div style={{ "margin-bottom": "4px" }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill={store.effectiveStrategy() === 'Vfs' ? 'var(--text-accent)' : 'var(--text-secondary)'}>
@@ -43,16 +44,16 @@ export function MountEngineSection() {
               </svg>
             </div>
             <div class={`settings__strategy-label${store.effectiveStrategy() === 'Vfs' ? ' settings__strategy-label--active' : ''}`}>
-              VFS
+              {t('engine.strategyVfs')}
             </div>
-            <div class="settings__strategy-hint">Auto / Kernel</div>
+            <div class="settings__strategy-hint">{t('engine.strategyVfsHint')}</div>
           </button>
 
           <button
             class={`settings__strategy${store.effectiveStrategy() === 'Overlay' ? ' settings__strategy--active' : ''}${!caps()?.overlay_supported ? ' settings__strategy--disabled' : ''}`}
             onClick={() => store.setMountStrategy('Overlay')}
             disabled={!caps()?.overlay_supported}
-            title={!caps()?.overlay_supported ? 'OverlayFS not supported on this kernel' : 'Prefer OverlayFS stacked filesystem'}
+            title={!caps()?.overlay_supported ? t('engine.titleOverlayUnavailable') : t('engine.titleOverlayPrefer')}
           >
             <div style={{ "margin-bottom": "4px" }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill={store.effectiveStrategy() === 'Overlay' ? 'var(--text-accent)' : 'var(--text-secondary)'}>
@@ -60,15 +61,15 @@ export function MountEngineSection() {
               </svg>
             </div>
             <div class={`settings__strategy-label${store.effectiveStrategy() === 'Overlay' ? ' settings__strategy-label--active' : ''}`}>
-              Overlay
+              {t('engine.strategyOverlay')}
             </div>
-            <div class="settings__strategy-hint">OverlayFS</div>
+            <div class="settings__strategy-hint">{t('engine.strategyOverlayHint')}</div>
           </button>
 
           <button
             class={`settings__strategy${store.effectiveStrategy() === 'MagicMount' ? ' settings__strategy--active' : ''}`}
             onClick={() => store.setMountStrategy('MagicMount')}
-            title="Bind mounts (Magisk-style) — always available"
+            title={t('engine.titleMagicMount')}
           >
             <div style={{ "margin-bottom": "4px" }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill={store.effectiveStrategy() === 'MagicMount' ? 'var(--text-accent)' : 'var(--text-secondary)'}>
@@ -76,32 +77,32 @@ export function MountEngineSection() {
               </svg>
             </div>
             <div class={`settings__strategy-label${store.effectiveStrategy() === 'MagicMount' ? ' settings__strategy-label--active' : ''}`}>
-              Magic
+              {t('engine.strategyMagic')}
             </div>
-            <div class="settings__strategy-hint">Bind Mount</div>
+            <div class="settings__strategy-hint">{t('engine.strategyMagicHint')}</div>
           </button>
         </div>
         <div class="settings__item-desc" style={{ "margin-top": "8px", "font-style": "italic" }}>
-          Switching mode requires reboot
+          {t('engine.switchingRequiresReboot')}
         </div>
       </div>
 
       <Show when={store.effectiveStrategy() !== 'Vfs'}>
         <Show when={store.effectiveStrategy() === 'Overlay'}>
           <div class="settings__group" style={{ "margin-top": "16px" }}>
-            <div class="settings__item-label">Storage Backend</div>
+            <div class="settings__item-label">{t('engine.storageBackend')}</div>
             <div class="settings__item-desc" style={{ "margin-bottom": "10px" }}>
-              Filesystem for staging module content
-              {caps()?.tmpfs_xattr ? '' : ' (tmpfs lacks xattr — overlay whiteouts unavailable)'}
+              {t('engine.storageBackendDesc')}
+              {caps()?.tmpfs_xattr ? '' : ` (${t('engine.storageBackendNoXattr')})`}
             </div>
             <ChipSelect
               value={store.settings.mount.storage_mode}
               onChange={(v) => store.setMountStorageMode(v as StorageMode)}
               options={[
-                { value: 'auto', label: 'Auto' },
-                { value: 'erofs', label: 'EROFS', disabled: !caps()?.erofs_supported },
-                { value: 'tmpfs', label: 'tmpfs', disabled: !caps()?.tmpfs_xattr },
-                { value: 'ext4', label: 'ext4' },
+                { value: 'auto', label: t('engine.storageAuto') },
+                { value: 'erofs', label: t('engine.storageErofs'), disabled: !caps()?.erofs_supported },
+                { value: 'tmpfs', label: t('engine.storageTmpfs'), disabled: !caps()?.tmpfs_xattr },
+                { value: 'ext4', label: t('engine.storageExt4') },
               ]}
             />
             <Show when={
@@ -110,7 +111,7 @@ export function MountEngineSection() {
               store.resolvedStorageMode() !== store.settings.mount.storage_mode
             }>
               <div class="settings__item-desc" style={{ color: 'var(--warning)', "margin-top": "8px" }}>
-                {store.settings.mount.storage_mode} unavailable — resolved to {store.resolvedStorageMode()}
+                {t('engine.storageUnavailable', { selected: store.settings.mount.storage_mode, resolved: store.resolvedStorageMode()! })}
               </div>
             </Show>
           </div>
@@ -118,8 +119,8 @@ export function MountEngineSection() {
 
         <div class="settings__item">
           <div class="settings__item-content">
-            <div class="settings__item-label">Random Mount Paths</div>
-            <div class="settings__item-desc">Randomize staging directory names at boot</div>
+            <div class="settings__item-label">{t('engine.randomMountPaths')}</div>
+            <div class="settings__item-desc">{t('engine.randomMountPathsDesc')}</div>
           </div>
           <Toggle
             checked={store.settings.mount.random_mount_paths}
@@ -130,20 +131,20 @@ export function MountEngineSection() {
         <Show when={store.effectiveStrategy() !== 'MagicMount'}>
           <div class="settings__item">
             <div class="settings__item-content">
-              <div class="settings__item-label">Overlay Mount Source</div>
+              <div class="settings__item-label">{t('engine.overlayMountSource')}</div>
               <div class="settings__item-desc">
-                Source device for overlay mounts
+                {t('engine.overlayMountSourceDesc')}
               </div>
             </div>
             <button class="settings__select-trigger" onClick={() => setShowOverlaySheet(true)}>
-              <span>{['auto', 'KSU', 'magisk', 'overlay'].includes(store.settings.mount.overlay_source) ? store.settings.mount.overlay_source : 'Custom'}</span>
+              <span>{['auto', 'KSU', 'magisk', 'overlay'].includes(store.settings.mount.overlay_source) ? store.settings.mount.overlay_source : t('engine.customLabel')}</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
             </button>
           </div>
           <BottomSheet
             open={showOverlaySheet()}
             onClose={() => setShowOverlaySheet(false)}
-            title="Overlay Mount Source"
+            title={t('engine.overlayMountSource')}
             value={['auto', 'KSU', 'magisk', 'overlay'].includes(store.settings.mount.overlay_source) ? store.settings.mount.overlay_source : 'custom'}
             onChange={(val) => {
               if (val !== 'custom') {
@@ -153,14 +154,14 @@ export function MountEngineSection() {
               }
             }}
             options={[
-              { value: 'auto', label: 'Auto', description: 'Resolves per root manager (KSU/Magisk)' },
-              { value: 'KSU', label: 'KSU', description: 'KernelSU device label' },
-              { value: 'magisk', label: 'magisk', description: 'Magisk device label' },
-              { value: 'overlay', label: 'overlay', description: 'Generic overlay device' },
-              { value: 'custom', label: 'Custom', description: 'Enter a custom device label' },
+              { value: 'auto', label: t('engine.storageAuto'), description: t('engine.overlayOptAuto') },
+              { value: 'KSU', label: 'KSU', description: t('engine.overlayOptKsu') },
+              { value: 'magisk', label: 'magisk', description: t('engine.overlayOptMagisk') },
+              { value: 'overlay', label: 'overlay', description: t('engine.overlayOptOverlay') },
+              { value: 'custom', label: t('engine.customLabel'), description: t('engine.overlayOptCustom') },
             ]}
             customInput={{
-              placeholder: 'e.g. my_overlay',
+              placeholder: t('engine.overlayPlaceholder'),
               value: customOverlaySource(),
               onInput: setCustomOverlaySource,
               onConfirm: (v) => store.setOverlaySource(v),
@@ -170,20 +171,20 @@ export function MountEngineSection() {
 
         <div class="settings__item">
           <div class="settings__item-content">
-            <div class="settings__item-label">Staging Mount Source</div>
+            <div class="settings__item-label">{t('engine.stagingMountSource')}</div>
             <div class="settings__item-desc">
-              Source device for staging mounts
+              {t('engine.stagingMountSourceDesc')}
             </div>
           </div>
           <button class="settings__select-trigger" onClick={() => setShowStagingSheet(true)}>
-            <span>{['auto', 'tmpfs', 'none', 'shmem', 'shm'].includes(store.settings.mount.mount_source) ? store.settings.mount.mount_source : 'Custom'}</span>
+            <span>{['auto', 'tmpfs', 'none', 'shmem', 'shm'].includes(store.settings.mount.mount_source) ? store.settings.mount.mount_source : t('engine.customLabel')}</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
           </button>
         </div>
         <BottomSheet
           open={showStagingSheet()}
           onClose={() => setShowStagingSheet(false)}
-          title="Staging Mount Source"
+          title={t('engine.stagingMountSource')}
           value={['auto', 'tmpfs', 'none', 'shmem', 'shm'].includes(store.settings.mount.mount_source) ? store.settings.mount.mount_source : 'custom'}
           onChange={(val) => {
             if (val !== 'custom') {
@@ -193,15 +194,15 @@ export function MountEngineSection() {
             }
           }}
           options={[
-            { value: 'auto', label: 'Auto', description: 'Random selection per boot' },
-            { value: 'tmpfs', label: 'tmpfs', description: 'RAM-backed temporary filesystem' },
-            { value: 'none', label: 'none', description: 'VFS tmpfs mount' },
-            { value: 'shmem', label: 'shmem', description: 'Shared memory mount' },
-            { value: 'shm', label: 'shm', description: 'POSIX shared memory' },
-            { value: 'custom', label: 'Custom', description: 'Enter a custom device source' },
+            { value: 'auto', label: t('engine.storageAuto'), description: t('engine.stagingOptAuto') },
+            { value: 'tmpfs', label: 'tmpfs', description: t('engine.stagingOptTmpfs') },
+            { value: 'none', label: 'none', description: t('engine.stagingOptNone') },
+            { value: 'shmem', label: 'shmem', description: t('engine.stagingOptShmem') },
+            { value: 'shm', label: 'shm', description: t('engine.stagingOptShm') },
+            { value: 'custom', label: t('engine.customLabel'), description: t('engine.stagingOptCustom') },
           ]}
           customInput={{
-            placeholder: 'e.g. my_source',
+            placeholder: t('engine.stagingPlaceholder'),
             value: customMountSource(),
             onInput: setCustomMountSource,
             onConfirm: (v) => store.setMountSource(v),

@@ -5,6 +5,7 @@ import { CollapsibleSubgroup } from '../ui/CollapsibleSubgroup';
 import { store } from '../../lib/store';
 import { api } from '../../lib/api';
 import { ksuExec } from '../../lib/ksuApi';
+import { t } from '../../lib/i18n';
 import './GuardSection.css';
 
 interface ModuleEntry {
@@ -60,7 +61,7 @@ export function GuardSection() {
         <svg class="settings__section-icon" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
         </svg>
-        Bootloop Guard
+        {t('guard.title')}
       </h3>
 
       <div
@@ -72,8 +73,8 @@ export function GuardSection() {
       >
         <div class="guard__title-row">
           <div class="guard__title-text">
-            <div class="settings__item-label">Bootloop Guard</div>
-            <div class="settings__item-desc">Auto-disable modules on repeated boot failures</div>
+            <div class="settings__item-label">{t('guard.label')}</div>
+            <div class="settings__item-desc">{t('guard.desc')}</div>
           </div>
         </div>
         <div class="guard__controls">
@@ -95,24 +96,24 @@ export function GuardSection() {
         <div class="guard__body">
           <div class="guard__status-row">
             <span class={markerChipClass(gs().pfdMarkers)}>
-              PFD {gs().pfdMarkers}/{gs().threshold}
+              {t('guard.pfd', { current: gs().pfdMarkers, threshold: gs().threshold })}
             </span>
             <span class={markerChipClass(gs().svcMarkers)}>
-              SVC {gs().svcMarkers}/{gs().threshold}
+              {t('guard.svc', { current: gs().svcMarkers, threshold: gs().threshold })}
             </span>
           </div>
 
           <Show when={gs().lastRecovery}>
             <div class="guard__recovery settings__item-desc">
-              Last recovery: {gs().lastRecovery}
+              {t('guard.lastRecovery', { date: gs().lastRecovery! })}
             </div>
           </Show>
 
           <div class="settings__sub-toggles">
             <div class="settings__item settings__item--sub">
               <div class="settings__item-content">
-                <div class="settings__item-label">SystemUI Monitor</div>
-                <div class="settings__item-desc">Continuous crash detection for SystemUI</div>
+                <div class="settings__item-label">{t('guard.systemuiMonitor')}</div>
+                <div class="settings__item-desc">{t('guard.systemuiMonitorDesc')}</div>
               </div>
               <Toggle
                 checked={store.settings.guard.systemui_monitor_enabled}
@@ -122,7 +123,7 @@ export function GuardSection() {
           </div>
 
           <CollapsibleSubgroup
-            label={`Protected Modules (${protectedCount()}/${modules().length})`}
+            label={t('guard.protectedModules', { protected: protectedCount(), total: modules().length })}
             hiddenCount={modules().length}
             defaultItems={<></>}
             expandedItems={
@@ -145,10 +146,10 @@ export function GuardSection() {
                         <div class="guard__check-label">
                           <span>{mod.name}</span>
                           <Show when={mod.disabled}>
-                            <span class="guard__tag guard__tag--disabled">disabled</span>
+                            <span class="guard__tag guard__tag--disabled">{t('guard.tagDisabled')}</span>
                           </Show>
                           <Show when={mod.locked}>
-                            <span class="guard__tag guard__tag--locked">always</span>
+                            <span class="guard__tag guard__tag--locked">{t('guard.tagAlways')}</span>
                           </Show>
                         </div>
                       </div>
@@ -160,16 +161,16 @@ export function GuardSection() {
           />
 
           <CollapsibleSubgroup
-            label="Thresholds"
+            label={t('guard.thresholds')}
             hiddenCount={5}
             defaultItems={<></>}
             expandedItems={
               <div class="guard__threshold-list">
-                <ThresholdRow label="Boot timeout (s)" configKey="guard.boot_timeout_secs" value={store.settings.guard.boot_timeout_secs} />
-                <ThresholdRow label="Marker threshold" configKey="guard.marker_threshold" value={store.settings.guard.marker_threshold} />
-                <ThresholdRow label="Zygote max restarts" configKey="guard.zygote_max_restarts" value={store.settings.guard.zygote_max_restarts} />
-                <ThresholdRow label="SystemUI max restarts" configKey="guard.systemui_max_restarts" value={store.settings.guard.systemui_max_restarts} />
-                <ThresholdRow label="SystemUI absent timeout (s)" configKey="guard.systemui_absent_timeout_secs" value={store.settings.guard.systemui_absent_timeout_secs} />
+                <ThresholdRow label={t('guard.bootTimeout')} configKey="guard.boot_timeout_secs" value={store.settings.guard.boot_timeout_secs} />
+                <ThresholdRow label={t('guard.markerThreshold')} configKey="guard.marker_threshold" value={store.settings.guard.marker_threshold} />
+                <ThresholdRow label={t('guard.zygoteMaxRestarts')} configKey="guard.zygote_max_restarts" value={store.settings.guard.zygote_max_restarts} />
+                <ThresholdRow label={t('guard.systemuiMaxRestarts')} configKey="guard.systemui_max_restarts" value={store.settings.guard.systemui_max_restarts} />
+                <ThresholdRow label={t('guard.systemuiAbsentTimeout')} configKey="guard.systemui_absent_timeout_secs" value={store.settings.guard.systemui_absent_timeout_secs} />
               </div>
             }
           />
@@ -187,7 +188,7 @@ function ThresholdRow(props: { label: string; configKey: string; value: number }
       await api.configSet(props.configKey, String(val));
       store.showToast(`${props.label} → ${val}`, 'success');
     } catch {
-      store.showToast(`Failed to save ${props.label}`, 'error');
+      store.showToast(t('toast.failedSaveKey', { key: props.label }), 'error');
     }
   };
 

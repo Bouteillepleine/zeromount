@@ -232,6 +232,7 @@ export interface WebUiInitResponse {
     emoji: EmojiSettings;
     adb: AdbSettings;
     guard: GuardSettings;
+    ui?: { language: string };
   };
   emoji_conflict: string | null;
   system_info: {

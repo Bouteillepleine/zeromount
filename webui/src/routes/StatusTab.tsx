@@ -6,6 +6,7 @@ import { ScenarioIndicator } from '../components/core/ScenarioIndicator';
 import { Badge } from '../components/core/Badge';
 import { GuardSection } from '../components/settings/GuardSection';
 import { store } from '../lib/store';
+import { t } from '../lib/i18n';
 import type { MountStrategy } from '../lib/types';
 import './StatusTab.css';
 
@@ -47,27 +48,27 @@ export function StatusTab() {
 
   const mountModeLabel = createMemo(() => {
     switch (effectiveMode()) {
-      case 'vfs': return 'VFS Redirection';
-      case 'overlay': return 'OverlayFS';
-      case 'magicmount': return 'Magic Mount';
-      case 'susfs_only': return 'SUSFS Only';
+      case 'vfs': return t('status.modeVfs');
+      case 'overlay': return t('status.modeOverlay');
+      case 'magicmount': return t('status.modeMagicMount');
+      case 'susfs_only': return t('status.modeSusfsOnly');
     }
   });
 
   const mountModeValue = createMemo(() => {
     const mode = effectiveMode();
-    if (mode === 'susfs_only') return 'No Mount';
+    if (mode === 'susfs_only') return t('status.modeValueNoMount');
 
     const statuses = store.moduleStatuses();
-    if (statuses.some(m => m.strategy !== 'Font')) return 'Active';
+    if (statuses.some(m => m.strategy !== 'Font')) return t('status.modeValueActive');
 
     const caps = store.capabilities?.();
     const modeSupported = mode === 'overlay' ? caps?.overlay_supported
       : mode === 'vfs' ? caps?.vfs_driver
       : true;
 
-    if (!modeSupported) return 'Unavailable';
-    return 'Standby';
+    if (!modeSupported) return t('status.modeValueUnavailable');
+    return t('status.modeValueStandby');
   });
 
   const mountModeColor = createMemo(() => {
@@ -84,10 +85,10 @@ export function StatusTab() {
     const mode = effectiveMode();
     const storage = store.settings.mount.storage_mode;
     switch (mode) {
-      case 'vfs': return 'Kernel VFS driver handling filesystem redirection';
-      case 'overlay': return `OverlayFS stacked filesystem \u00b7 Storage: ${storage}`;
-      case 'magicmount': return `Bind mounts \u00b7 Storage: ${storage}`;
-      case 'susfs_only': return 'SUSFS hiding active, no mount redirection';
+      case 'vfs': return t('status.modeDescVfs');
+      case 'overlay': return t('status.modeDescOverlay', { storage });
+      case 'magicmount': return t('status.modeDescMagicMount', { storage });
+      case 'susfs_only': return t('status.modeDescSusfsOnly');
     }
   });
 
@@ -100,8 +101,8 @@ export function StatusTab() {
   });
 
   const heroStatusLabel = createMemo(() => {
-    if (isVfsMode()) return store.engineActive() ? 'Engine Active' : 'Engine Inactive';
-    return isModuleActive() ? 'Mounts Active' : 'No Modules Loaded';
+    if (isVfsMode()) return store.engineActive() ? t('status.engineActive') : t('status.engineInactive');
+    return isModuleActive() ? t('status.mountsActive') : t('status.noModulesLoaded');
   });
 
   onMount(() => {
@@ -137,12 +138,12 @@ export function StatusTab() {
 
   const formatTimeAgo = (date: Date) => {
     const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-    if (seconds < 60) return 'Just now';
+    if (seconds < 60) return t('status.timeJustNow');
     const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} min ago`;
+    if (minutes < 60) return t('status.timeMinAgo', { minutes });
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)} days ago`;
+    if (hours < 24) return t('status.timeHoursAgo', { hours });
+    return t('status.timeDaysAgo', { days: Math.floor(hours / 24) });
   };
 
   const getActivityIcon = (type: string) => {
@@ -296,7 +297,7 @@ export function StatusTab() {
                 loading={store.loading.engine}
                 style="min-width: 200px;"
               >
-                {store.engineActive() ? 'DISABLE ENGINE' : 'ENABLE ENGINE'}
+                {store.engineActive() ? t('status.disableEngine') : t('status.enableEngine')}
               </Button>
             </Show>
           </div>
@@ -306,7 +307,7 @@ export function StatusTab() {
       {/* Quick Stats */}
       <Card>
         <h3 class="status-section__header color-text-secondary">
-          Quick Stats
+          {t('status.quickStats')}
         </h3>
 
         <Show
@@ -334,7 +335,7 @@ export function StatusTab() {
                 {animatedActiveRules()}
               </div>
               <div class="status-stats__label color-text-tertiary">
-                Active Rules
+                {t('status.activeRules')}
               </div>
             </div>
 
@@ -343,7 +344,7 @@ export function StatusTab() {
                 {animatedPaths()}
               </div>
               <div class="status-stats__label color-text-tertiary">
-                Paths Hidden
+                {t('status.pathsHidden')}
               </div>
             </div>
 
@@ -352,7 +353,7 @@ export function StatusTab() {
                 {animatedMaps()}
               </div>
               <div class="status-stats__label color-text-tertiary">
-                Maps Hidden
+                {t('status.mapsHidden')}
               </div>
             </div>
           </div>
@@ -362,7 +363,7 @@ export function StatusTab() {
       {/* Mode Statistics */}
       <Card>
         <h3 class="status-section__header color-text-secondary">
-          Mode Statistics
+          {t('status.modeStatistics')}
         </h3>
         <div class="status-mode">
           <div class="status-mode__row">
@@ -389,7 +390,7 @@ export function StatusTab() {
                 style={{ background: strategyColor(displayStrategy()) }}
               />
               <span class="status-mode__text color-text-primary">
-                Strategy
+                {t('status.strategy')}
               </span>
             </div>
             <span class="status-mode__value color-text-accent">
@@ -397,7 +398,7 @@ export function StatusTab() {
             </span>
           </div>
           <div class="status-mode__reboot-hint color-text-tertiary">
-            Switching mode requires reboot
+            {t('status.switchingModeRequiresReboot')}
           </div>
           <div class="status-mode__row">
             <div class="status-mode__label">
@@ -408,16 +409,16 @@ export function StatusTab() {
                   : store.currentTheme().colorError }}
               />
               <span class="status-mode__text color-text-primary">
-                SUSFS
+                {t('status.susfs')}
               </span>
             </div>
             <span class="status-mode__value color-text-accent">
               {store.capabilities?.()?.susfs_available
                 ? `${(store.capabilities?.()?.susfs_version ?? store.systemInfo.susfsVersion) || '?'} (${
                     store.capabilities?.()?.susfs_kstat_redirect
-                      ? 'Extended' : 'Stock'
+                      ? t('status.susfsExtended') : t('status.susfsStock')
                   })`
-                : 'Unavailable'}
+                : t('status.susfsUnavailable')}
             </span>
           </div>
         </div>
@@ -426,7 +427,7 @@ export function StatusTab() {
           <div class="status-mode__modules">
             <div class="status-mode__modules-header">
               <div class="status-mode__modules-label color-text-tertiary">
-                Per-Module Strategy
+                {t('status.perModuleStrategy')}
               </div>
               <Show when={store.moduleStatuses().length > 3}>
                 <button
@@ -434,7 +435,7 @@ export function StatusTab() {
                   class="status-activity__toggle"
                   style={{ color: store.currentTheme().textAccent }}
                 >
-                  {showAllModules() ? 'Show Less' : `+${store.moduleStatuses().length - 3} more`}
+                  {showAllModules() ? t('status.showLess') : t('status.showMore', { count: store.moduleStatuses().length - 3 })}
                 </button>
               </Show>
             </div>
@@ -453,7 +454,7 @@ export function StatusTab() {
                       {mod.strategy}
                     </span>
                     <span class="status-mode__module-rules color-text-tertiary">
-                      {mod.rules_applied} {mod.strategy === 'Font' ? 'files' : 'rules'}
+                      {mod.rules_applied} {mod.strategy === 'Font' ? t('status.filesUnit') : t('status.rulesUnit')}
                     </span>
                   </div>
                 </div>
@@ -466,20 +467,20 @@ export function StatusTab() {
       {/* Mount Info */}
       <Card>
         <h3 class="status-section__header color-text-secondary">
-          Mount Info
+          {t('status.mountInfo')}
         </h3>
         <div class="status-mount__cards">
           <div class="status-mount__card bg-surface">
             <div class="status-mount__card-label color-text-tertiary">
-              Modules
+              {t('status.modules')}
             </div>
             <div class="status-mount__card-value color-text-primary">
-              {loadedModulesCount()} active
+              {t('status.modulesActive', { count: loadedModulesCount() })}
             </div>
           </div>
           <div class="status-mount__card bg-surface">
             <div class="status-mount__card-label color-text-tertiary">
-              Source
+              {t('status.source')}
             </div>
             <div class="status-mount__card-value color-text-accent">
               {(() => {
@@ -496,7 +497,7 @@ export function StatusTab() {
         </div>
         <div class="status-mount__paths-header">
           <div class="status-mount__paths-label color-text-tertiary">
-            Redirected Paths
+            {t('status.redirectedPaths')}
           </div>
           <Show when={pathChips().length > 5}>
             <button
@@ -504,7 +505,7 @@ export function StatusTab() {
               class="status-activity__toggle"
               style={{ color: store.currentTheme().textAccent }}
             >
-              {showAllPaths() ? 'Show Less' : `+${pathChips().length - 5} more`}
+              {showAllPaths() ? t('status.showLess') : t('status.showMore', { count: pathChips().length - 5 })}
             </button>
           </Show>
         </div>
@@ -512,7 +513,7 @@ export function StatusTab() {
           when={pathChips().length > 0}
           fallback={
             <div class="status-mount__empty color-text-tertiary">
-              No paths redirected
+              {t('status.noPathsRedirected')}
             </div>
           }
         >
@@ -531,7 +532,7 @@ export function StatusTab() {
       {/* System Health */}
       <Card>
         <h3 class="status-section__header color-text-secondary">
-          System Health
+          {t('status.systemHealth')}
         </h3>
         <div class="status-health">
           <div>
@@ -540,20 +541,20 @@ export function StatusTab() {
                 class="status-health__level"
                 style={{ color: store.currentTheme().colorInfo || '#3b82f6' }}
               >
-                INFO
+                {t('status.levelInfo')}
               </span>
               <span class="status-health__title color-text-primary">
-                SUSFS
+                {t('status.susfs')}
               </span>
             </div>
             <div class="status-health__message color-text-secondary">
               {store.settings.susfs.enabled
                 ? (store.capabilities?.()?.susfs_kstat_redirect
-                    ? 'Extended kernel — all features available'
-                    : 'Stock kernel — custom commands unavailable')
+                    ? t('status.healthSusfsExtendedAll')
+                    : t('status.healthSusfsStockLimited'))
                 : store.systemInfo.susfsVersion && store.systemInfo.susfsVersion !== 'N/A'
-                  ? 'SUSFS available but disabled'
-                  : 'Running without SUSFS'}
+                  ? t('status.healthSusfsAvailableDisabled')
+                  : t('status.healthSusfsNotRunning')}
             </div>
             <Show when={store.settings.susfs.enabled && store.capabilities?.()}>
               <div class="status-health__features">
@@ -587,14 +588,14 @@ export function StatusTab() {
                   class="status-health__level"
                   style={{ color: store.currentTheme().colorWarning }}
                 >
-                  WARNING
+                  {t('status.levelWarning')}
                 </span>
                 <span class="status-health__title color-text-primary">
-                  Degraded
+                  {t('status.healthDegraded')}
                 </span>
               </div>
               <div class="status-health__message color-text-secondary">
-                {store.degradationReason() || 'System running in degraded mode'}
+                {store.degradationReason() || t('status.healthDegradedDefault')}
               </div>
             </div>
           </Show>
@@ -605,14 +606,14 @@ export function StatusTab() {
                   class="status-health__level"
                   style={{ color: store.currentTheme().colorWarning }}
                 >
-                  WARNING
+                  {t('status.levelWarning')}
                 </span>
                 <span class="status-health__title color-text-primary">
-                  Rules
+                  {t('status.healthRules')}
                 </span>
               </div>
               <div class="status-health__message status-health__message--warning color-text-secondary">
-                No redirection rules configured
+                {t('status.healthNoRules')}
               </div>
             </div>
           </Show>
@@ -625,13 +626,13 @@ export function StatusTab() {
       <Card>
         <div class="status-activity__header">
           <h3 class="status-section__header status-activity__title color-text-secondary">
-            Recent Activity
+            {t('status.recentActivity')}
           </h3>
           <button
             onClick={() => setShowAllActivity(!showAllActivity())}
             class="status-activity__toggle color-text-accent"
           >
-            {showAllActivity() ? 'Show Less' : 'View All'}
+            {showAllActivity() ? t('status.showLess') : t('status.viewAll')}
           </button>
         </div>
 
@@ -660,7 +661,7 @@ export function StatusTab() {
       {/* System Info */}
       <Card>
         <h3 class="status-section__header color-text-secondary">
-          System Info
+          {t('status.systemInfo')}
         </h3>
 
         <Show
@@ -679,37 +680,37 @@ export function StatusTab() {
         >
           <div class="status-info__grid">
             <div>
-              <span class="status-info__label color-text-tertiary">Device:</span>
+              <span class="status-info__label color-text-tertiary">{t('status.infoDevice')}</span>
               <span class="color-text-primary">{store.systemInfo.deviceModel}</span>
             </div>
             <div>
-              <span class="status-info__label color-text-tertiary">Android:</span>
+              <span class="status-info__label color-text-tertiary">{t('status.infoAndroid')}</span>
               <span class="color-text-primary">{store.systemInfo.androidVersion}</span>
             </div>
             <div>
-              <span class="status-info__label color-text-tertiary">SELinux:</span>
+              <span class="status-info__label color-text-tertiary">{t('status.infoSelinux')}</span>
               <span class="color-text-accent">{store.systemInfo.selinuxStatus}</span>
             </div>
             <div>
-              <span class="status-info__label color-text-tertiary">Kernel:</span>
+              <span class="status-info__label color-text-tertiary">{t('status.infoKernel')}</span>
               <span class="color-text-primary">{store.systemInfo.kernelVersion}</span>
             </div>
             <div>
-              <span class="status-info__label color-text-tertiary">Driver:</span>
+              <span class="status-info__label color-text-tertiary">{t('status.infoDriver')}</span>
               <span class="color-text-accent">{store.systemInfo.driverVersion}</span>
             </div>
             <div>
-              <span class="status-info__label color-text-tertiary">SUSFS:</span>
+              <span class="status-info__label color-text-tertiary">{t('status.infoSusfs')}</span>
               <span class="color-text-accent">{store.systemInfo.susfsVersion}</span>
             </div>
             <div>
-              <span class="status-info__label color-text-tertiary">Root:</span>
-              <span class="color-text-accent">{store.rootManager() ?? 'Unknown'}</span>
+              <span class="status-info__label color-text-tertiary">{t('status.infoRoot')}</span>
+              <span class="color-text-accent">{store.rootManager() ?? t('status.infoRootUnknown')}</span>
             </div>
             <Show when={store.engineActive()}>
               <div>
-                <span class="status-info__label color-text-tertiary">misc:</span>
-                <span class="color-text-primary">/dev/zeromount</span>
+                <span class="status-info__label color-text-tertiary">{t('status.infoMisc')}</span>
+                <span class="color-text-primary">{t('status.infoMiscValue')}</span>
               </div>
             </Show>
           </div>

@@ -445,13 +445,14 @@ impl MountController<Mounted> {
             .copied()
             .collect();
 
+        let ds = crate::core::desc_strings::desc_strings(&self.state.config.ui.language);
+
         if vfs_only.is_empty() && font_ids.is_empty() {
-            return "😴 Idle — No Module Mounted | Mountless VFS-level Redirection. GHOST👻"
-                .to_string();
+            return format!("😴 {} | Mountless VFS-level Redirection. GHOST👻", ds.idle);
         }
 
         let total = vfs_only.len() + font_ids.len();
-        let label = if total == 1 { "Module" } else { "Modules" };
+        let label = if total == 1 { ds.module_singular } else { ds.module_plural };
         let mut parts = Vec::new();
 
         if !vfs_only.is_empty() {
@@ -460,7 +461,7 @@ impl MountController<Mounted> {
 
         if !font_ids.is_empty() {
             let names: Vec<&str> = font_ids.iter().copied().collect();
-            parts.push(format!("Font: {}", names.join(", ")));
+            parts.push(format!("{}: {}", ds.font_prefix, names.join(", ")));
         }
 
         format!("✅ GHOST ⚡️ | {} {} | {}", total, label, parts.join(" | "))
@@ -918,6 +919,7 @@ mod tests {
         let desc = ctrl.build_description_summary(&[]);
         assert!(desc.contains("Idle"));
         assert!(desc.contains("GHOST"));
+        assert!(desc.contains("Mountless VFS-level Redirection"));
     }
 
     #[test]

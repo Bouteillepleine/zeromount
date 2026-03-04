@@ -1,7 +1,10 @@
 import { createSignal, Show, For } from 'solid-js';
 import { Card } from '../core/Card';
 import { Toggle } from '../core/Toggle';
+import { BottomSheet } from '../ui/BottomSheet';
 import { store } from '../../lib/store';
+import { t } from '../../lib/i18n';
+import { LANGUAGES, locale } from '../../lib/i18n';
 
 const accentColors = [
   { name: 'Orange', color: '#FF8E53' },
@@ -16,8 +19,10 @@ const accentColors = [
 
 export function AppearanceSection() {
   const [glassOpen, setGlassOpen] = createSignal(false);
+  const [showLangSheet, setShowLangSheet] = createSignal(false);
   const selectedAccent = () => store.settings.accentColor;
   const isThemeActive = (themeName: string) => store.settings.theme === themeName;
+  const currentLangName = () => LANGUAGES.find(l => l.code === locale())?.name ?? 'English';
 
   const handleThemeChange = (newTheme: 'dark' | 'light' | 'auto' | 'amoled') => {
     store.updateSettings({ theme: newTheme });
@@ -29,11 +34,11 @@ export function AppearanceSection() {
         <svg class="settings__section-icon" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
         </svg>
-        Appearance
+        {t('appearance.title')}
       </h3>
 
       <div class="settings__group">
-        <div class="settings__label">Theme</div>
+        <div class="settings__label">{t('appearance.theme')}</div>
         <div class="settings__themes">
           <button
             class={`settings__theme ${isThemeActive('dark') ? 'settings__theme--active' : ''}`}
@@ -45,7 +50,7 @@ export function AppearanceSection() {
               </svg>
             </div>
             <div class={`settings__theme-label ${isThemeActive('dark') ? 'settings__theme-label--active' : ''}`}>
-              Dark
+              {t('appearance.dark')}
             </div>
           </button>
 
@@ -59,7 +64,7 @@ export function AppearanceSection() {
               </svg>
             </div>
             <div class={`settings__theme-label ${isThemeActive('light') ? 'settings__theme-label--active' : ''}`}>
-              Light
+              {t('appearance.light')}
             </div>
           </button>
 
@@ -73,7 +78,7 @@ export function AppearanceSection() {
               </svg>
             </div>
             <div class={`settings__theme-label ${isThemeActive('auto') ? 'settings__theme-label--active' : ''}`}>
-              Auto
+              {t('appearance.auto')}
             </div>
           </button>
 
@@ -87,14 +92,34 @@ export function AppearanceSection() {
               </svg>
             </div>
             <div class={`settings__theme-label ${isThemeActive('amoled') ? 'settings__theme-label--active' : ''}`}>
-              AMOLED
+              {t('appearance.amoled')}
             </div>
           </button>
         </div>
       </div>
 
+      <div class="settings__group">
+        <div class="settings__label">{t('appearance.language')}</div>
+        <button class="settings__source-btn" onClick={() => setShowLangSheet(true)}>
+          {currentLangName()}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+      </div>
+
+      <BottomSheet
+        open={showLangSheet()}
+        onClose={() => setShowLangSheet(false)}
+        title={t('appearance.language')}
+        options={LANGUAGES.map(l => ({
+          value: l.code,
+          label: l.name,
+        }))}
+        value={locale()}
+        onChange={(code) => { store.setLanguage(code); setShowLangSheet(false); }}
+      />
+
       <div class={`settings__group ${store.settings.autoAccentColor ? 'settings__group--disabled' : ''}`}>
-        <div class="settings__label">Accent Color</div>
+        <div class="settings__label">{t('appearance.accentColor')}</div>
         <div class="settings__colors">
           <For each={accentColors}>
             {(accent) => (
@@ -118,8 +143,8 @@ export function AppearanceSection() {
 
       <div class="settings__item">
         <div class="settings__item-content">
-          <div class="settings__item-label">Random Accent</div>
-          <div class="settings__item-desc">Change accent color each session</div>
+          <div class="settings__item-label">{t('appearance.randomAccent')}</div>
+          <div class="settings__item-desc">{t('appearance.randomAccentDesc')}</div>
         </div>
         <Toggle
           checked={store.settings.autoAccentColor}
@@ -134,8 +159,8 @@ export function AppearanceSection() {
 
       <div class="settings__glass-row" onClick={() => setGlassOpen(!glassOpen())}>
         <div class="settings__item-content">
-          <div class="settings__item-label">Glass Intensity</div>
-          <div class="settings__item-desc">Background frosted glass effect</div>
+          <div class="settings__item-label">{t('appearance.glassIntensity')}</div>
+          <div class="settings__item-desc">{t('appearance.glassIntensityDesc')}</div>
         </div>
         <div class="settings__glass-badge">
           <span>{Math.round(store.bgOpacity() * 100)}%</span>
@@ -159,8 +184,8 @@ export function AppearanceSection() {
 
       <div class="settings__item">
         <div class="settings__item-content">
-          <div class="settings__item-label">Fix Bottom Nav</div>
-          <div class="settings__item-desc">Pin navigation to bottom of screen</div>
+          <div class="settings__item-label">{t('appearance.fixBottomNav')}</div>
+          <div class="settings__item-desc">{t('appearance.fixBottomNavDesc')}</div>
         </div>
         <Toggle
           checked={store.settings.fixedNav}
