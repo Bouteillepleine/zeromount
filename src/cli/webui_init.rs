@@ -24,6 +24,18 @@ struct WebUiInitResponse {
     pub modules: Vec<WebUiModule>,
     pub emoji_conflict: Option<String>,
     pub bridge_values: Option<BridgeValues>,
+    pub guard: WebUiGuardStatus,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WebUiGuardStatus {
+    pub enabled: bool,
+    pub pfd_markers: u32,
+    pub svc_markers: u32,
+    pub threshold: u32,
+    pub last_recovery: Option<String>,
+    pub allowed_modules: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -95,6 +107,17 @@ pub fn handle_webui_init() -> Result<()> {
             }),
     };
 
+    let (pfd_markers, svc_markers) = crate::guard::markers::status();
+    let last_recovery = find_last_recovery(&activity);
+    let guard = WebUiGuardStatus {
+        enabled: config.guard.enabled,
+        pfd_markers,
+        svc_markers,
+        threshold: config.guard.marker_threshold,
+        last_recovery,
+        allowed_modules: config.guard.allowed_modules.clone(),
+    };
+
     let response = WebUiInitResponse {
         status,
         config,
@@ -105,6 +128,7 @@ pub fn handle_webui_init() -> Result<()> {
         modules,
         emoji_conflict,
         bridge_values,
+        guard,
     };
 
     let json = serde_json::to_string(&response)?;
@@ -393,4 +417,11 @@ fn count_files_recursive(dir: &Path) -> usize {
         }
     }
     count
+}
+
+fn find_last_recovery(activity: &[WebUiActivityItem]) -> Option<String> {
+    activity
+        .iter()
+        .find(|item| item.item_type == "guard_recovery")
+        .map(|item| item.timestamp.clone())
 }

@@ -4,6 +4,7 @@ import { Button } from '../components/core/Button';
 import { Skeleton } from '../components/core/Skeleton';
 import { ScenarioIndicator } from '../components/core/ScenarioIndicator';
 import { Badge } from '../components/core/Badge';
+import { GuardSection } from '../components/settings/GuardSection';
 import { store } from '../lib/store';
 import type { MountStrategy } from '../lib/types';
 import './StatusTab.css';
@@ -617,6 +618,8 @@ export function StatusTab() {
           </Show>
         </div>
       </Card>
+
+      <GuardSection />
 
       {/* Recent Activity */}
       <Card>

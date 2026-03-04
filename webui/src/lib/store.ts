@@ -1,7 +1,8 @@
 import { createSignal, createRoot, createMemo, createEffect, batch } from 'solid-js';
 import { createStore } from 'solid-js/store';
-import type { Tab, Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo, Settings, InstalledApp, KsuModule, CapabilityFlags, ModuleStatus, BreneSettings, SusfsSettings, PerfSettings, EmojiSettings, AdbSettings, UnameSettings, UnameMode, MountSettings, StorageMode, MountStrategy, WebUiInitResponse, SusfsOwnership, BridgeValues } from './types';
+import type { Tab, Scenario, VfsRule, ExcludedUid, ActivityItem, EngineStats, SystemInfo, Settings, InstalledApp, KsuModule, CapabilityFlags, ModuleStatus, BreneSettings, SusfsSettings, PerfSettings, EmojiSettings, AdbSettings, GuardSettings, GuardStatus, UnameSettings, UnameMode, MountSettings, StorageMode, MountStrategy, WebUiInitResponse, SusfsOwnership, BridgeValues } from './types';
 import { api, shouldUseMock } from './api';
+import { PATHS } from './constants';
 import { listPackages, getPackagesInfo, getAppLabelViaAapt, ksuExec } from './ksuApi';
 import { darkTheme, lightTheme, amoledTheme, applyTheme, getAccentStyles, accentPresets, accentNames } from './theme';
 import { readCache, writeCache, type HydratableState } from './cache';
@@ -64,6 +65,10 @@ function createAppStore() {
   const [externalSusfsModule, setExternalSusfsModule] = createSignal<'susfs4ksu' | 'brene' | null>(null);
   const [bridgeValues, setBridgeValues] = createSignal<BridgeValues | null>(null);
   const [verboseDumpPath, setVerboseDumpPath] = createSignal<string | null>(null);
+  const [guardStatus, setGuardStatus] = createSignal<GuardStatus>({
+    enabled: true, pfdMarkers: 0, svcMarkers: 0, threshold: 2,
+    lastRecovery: null, allowedModules: ['meta-zeromount'],
+  });
 
   const savedBgOpacity = typeof window !== 'undefined'
     ? parseFloat(localStorage.getItem('zeromount-bgOpacity') ?? '0.35')
@@ -151,6 +156,22 @@ function createAppStore() {
     adb_root: false,
   };
 
+  const defaultGuard: GuardSettings = {
+    enabled: true,
+    marker_threshold: 2,
+    boot_timeout_secs: 100,
+    zygote_watch_secs: 30,
+    zygote_poll_secs: 4,
+    zygote_max_restarts: 4,
+    systemui_watch_secs: 30,
+    systemui_poll_secs: 4,
+    systemui_max_restarts: 3,
+    systemui_absent_timeout_secs: 25,
+    systemui_monitor_enabled: true,
+    allowed_modules: ['meta-zeromount'],
+    allowed_scripts: [],
+  };
+
   const [settings, setSettings] = createStore<Settings>({
     theme: (savedTheme || 'amoled') as 'dark' | 'light' | 'auto' | 'amoled',
     accentColor: initialAccent,
@@ -164,6 +185,7 @@ function createAppStore() {
     perf: { ...defaultPerf },
     emoji: { enabled: false },
     adb: { ...defaultAdb },
+    guard: { ...defaultGuard },
   });
 
   const [systemPrefersDark, setSystemPrefersDark] = createSignal(
@@ -421,6 +443,13 @@ function createAppStore() {
     const extMod = s.capabilities?.external_susfs_module;
     setExternalSusfsModule(extMod && extMod !== 'none' ? extMod : null);
     setBridgeValues(data.bridge_values ?? null);
+
+    if (data.guard) {
+      setGuardStatus(data.guard);
+    }
+    if (cfg.guard) {
+      setSettings('guard', prev => ({ ...prev, ...cfg.guard }));
+    }
 
     if (cfg.logging) {
       setSettings({ verboseLogging: typeof cfg.logging.verbose === 'boolean' ? cfg.logging.verbose : settings.verboseLogging });
@@ -874,6 +903,51 @@ function createAppStore() {
     } catch (e) {
       showToast(`Failed to save ${key}`, 'error');
       setSettings('adb', key, !value);
+    }
+  };
+
+  const setGuardToggle = async (key: 'enabled' | 'systemui_monitor_enabled', value: boolean) => {
+    setSettings('guard', key, value);
+    if (key === 'enabled') setGuardStatus(prev => ({ ...prev, enabled: value }));
+    try {
+      await api.configSet(`guard.${key}`, String(value));
+      pushActivity('setting_changed', `guard.${key} → ${value ? 'ON' : 'OFF'}`);
+    } catch (e) {
+      showToast(`Failed to save guard.${key}`, 'error');
+      setSettings('guard', key, !value);
+      if (key === 'enabled') setGuardStatus(prev => ({ ...prev, enabled: !value }));
+    }
+  };
+
+  const guardAllowModule = async (name: string) => {
+    try {
+      await ksuExec(`${PATHS.BINARY} guard allow ${name}`);
+      setGuardStatus(prev => ({
+        ...prev,
+        allowedModules: [...prev.allowedModules.filter(m => m !== name), name],
+      }));
+      setSettings('guard', 'allowed_modules', (prev: string[]) => [...prev.filter(m => m !== name), name]);
+      showToast(`${name} added to whitelist`, 'success');
+    } catch (e) {
+      showToast(`Failed to whitelist ${name}`, 'error');
+    }
+  };
+
+  const guardDisallowModule = async (name: string) => {
+    if (name === 'meta-zeromount') {
+      showToast('meta-zeromount cannot be removed', 'error');
+      return;
+    }
+    try {
+      await ksuExec(`${PATHS.BINARY} guard disallow ${name}`);
+      setGuardStatus(prev => ({
+        ...prev,
+        allowedModules: prev.allowedModules.filter(m => m !== name),
+      }));
+      setSettings('guard', 'allowed_modules', (prev: string[]) => prev.filter(m => m !== name));
+      showToast(`${name} removed from whitelist`, 'success');
+    } catch (e) {
+      showToast(`Failed to remove ${name}`, 'error');
     }
   };
 
@@ -1432,6 +1506,10 @@ function createAppStore() {
     setPerfToggle,
     setEmojiToggle,
     setAdbToggle,
+    setGuardToggle,
+    guardStatus,
+    guardAllowModule,
+    guardDisallowModule,
     emojiConflict,
     setUnameMode,
     setUnameField,
