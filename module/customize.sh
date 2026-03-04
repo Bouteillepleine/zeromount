@@ -54,7 +54,7 @@ if [ ! -f "$BIN" ]; then
     abort "  ❌ Binary not found: bin/${ABI}/zeromount"
 fi
 
-chmod 755 "$MODPATH/bin/${ABI}"/*
+set_perm_recursive "$MODPATH/bin/${ABI}" 0 0 0755 0755
 
 for d in "$MODPATH"/bin/*/; do
     [ "$d" = "$MODPATH/bin/${ABI}/" ] && continue
@@ -62,7 +62,7 @@ for d in "$MODPATH"/bin/*/; do
 done
 
 cp "$BIN" "$MODPATH/bin/zm" || abort "  ❌ Failed to copy binary"
-chmod 755 "$MODPATH/bin/zm"
+set_perm "$MODPATH/bin/zm" 0 0 0755
 zm_print "  ✅ Binary ready"
 
 if [ -c /dev/zeromount ] || [ -e /dev/zeromount ]; then
@@ -130,8 +130,7 @@ EMOJI_DIR="$ZM_DATA/emoji"
 mkdir -p "$EMOJI_DIR"
 if [ -f "$MODPATH/emoji/NotoColorEmoji.ttf" ]; then
     cp "$MODPATH/emoji/NotoColorEmoji.ttf" "$EMOJI_DIR/" 2>/dev/null
-    chmod 644 "$EMOJI_DIR/NotoColorEmoji.ttf" 2>/dev/null
-    chcon u:object_r:system_file:s0 "$EMOJI_DIR/NotoColorEmoji.ttf" 2>/dev/null
+    set_perm "$EMOJI_DIR/NotoColorEmoji.ttf" 0 0 0644 u:object_r:system_file:s0
     zm_print "  ✅ Emoji font staged"
 fi
 
@@ -177,10 +176,10 @@ rm -rf "$MODPATH/webroot/webroot" 2>/dev/null
 
 # Stage axon libraries
 if [ -d "$MODPATH/lib/${ABI}" ]; then
-    chmod 644 "$MODPATH/lib/${ABI}"/*.so 2>/dev/null
+    set_perm_recursive "$MODPATH/lib/${ABI}" 0 0 0755 0644
 fi
 if [ -f "$MODPATH/bin/${ABI}/axon_inject" ]; then
-    chmod 755 "$MODPATH/bin/${ABI}/axon_inject"
+    set_perm "$MODPATH/bin/${ABI}/axon_inject" 0 0 0755
 fi
 
 set_perm_recursive "$MODPATH/bin" 0 0 0755 0755

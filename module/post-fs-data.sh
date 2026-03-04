@@ -73,7 +73,7 @@ if [ -f /linkerconfig/com.android.adbd/ld.config.txt ]; then
 fi
 
 echo "zeromount: injecting axon into init (PID 1)" > /dev/kmsg 2>/dev/null
-"$INJECT" 1 "$AXON_PATH/libaxon_init.so"
+timeout 5 "$INJECT" 1 "$AXON_PATH/libaxon_init.so"
 INJECT_RC=$?
 
 if [ "$INJECT_RC" -eq 0 ]; then

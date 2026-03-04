@@ -24,11 +24,16 @@ function isValidPackageName(name: string): boolean {
   return VALID_PACKAGE_PATTERN.test(name) && name.length <= 256;
 }
 
-export async function ksuExec(cmd: string, timeoutMs = 30000): Promise<KsuExecResult> {
+export async function ksuExec(cmd: string, options?: { cwd?: string; env?: Record<string, string>; timeout?: number }): Promise<KsuExecResult> {
   const ksu = globalThis.ksu;
   if (!ksu?.exec) {
     return { errno: -1, stdout: '', stderr: 'KSU not available' };
   }
+
+  const timeoutMs = options?.timeout ?? 30000;
+  const execOpts: Record<string, unknown> = {};
+  if (options?.cwd) execOpts.cwd = options.cwd;
+  if (options?.env) execOpts.env = options.env;
 
   return new Promise((resolve) => {
     const callbackName = `ksu_api_cb_${Date.now()}_${execCounter++}`;
@@ -46,7 +51,7 @@ export async function ksuExec(cmd: string, timeoutMs = 30000): Promise<KsuExecRe
     };
 
     try {
-      ksu.exec(cmd, '{}', callbackName);
+      ksu.exec(cmd, JSON.stringify(execOpts), callbackName);
     } catch {
       clearTimeout(timeoutId);
       delete win[callbackName];
