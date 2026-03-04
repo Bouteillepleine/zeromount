@@ -104,6 +104,23 @@ if [ "$FRESH_INSTALL" = true ]; then
     VBS=$(( 4096 + ($(od -An -tu1 -N1 /dev/urandom) % 8) * 1024 ))
     "$BIN" config set brene.vbmeta_size "$VBS" 2>/dev/null
     zm_print "  ✅ vbmeta_size randomized: $VBS"
+    # Detect device language for WebUI + description strings
+    DEVICE_LANG=$(getprop ro.system.locale 2>/dev/null)
+    [ -z "$DEVICE_LANG" ] && DEVICE_LANG=$(getprop persist.sys.locale 2>/dev/null)
+    [ -z "$DEVICE_LANG" ] && DEVICE_LANG=$(getprop ro.product.locale 2>/dev/null)
+    LANG_CODE=$(printf '%s' "$DEVICE_LANG" | sed 's/_/-/g')
+    case "$LANG_CODE" in
+      zh-Hans*|zh-CN*) LANG_CODE="zh-CN" ;;
+      zh-Hant*|zh-TW*) LANG_CODE="zh-TW" ;;
+      pt-BR*) LANG_CODE="pt-BR" ;;
+      pt*) LANG_CODE="pt-PT" ;;
+      *) LANG_CODE=$(printf '%s' "$LANG_CODE" | cut -d- -f1) ;;
+    esac
+    case "$LANG_CODE" in
+      af|ar|bg|bn|ca|cs|da|de|el|en|es|fa|fi|fr|he|hi|hu|id|it|ja|ko|nl|no|pl|pt-BR|pt-PT|ro|ru|sr|sv|th|tr|uk|vi|zh-CN|zh-TW) ;;
+      *) LANG_CODE="en" ;;
+    esac
+    "$BIN" config set ui.language "$LANG_CODE" 2>/dev/null
 else
     zm_print "  ✅ Existing config preserved"
     # Merge new keys: load fills defaults for missing fields, dump writes them back
