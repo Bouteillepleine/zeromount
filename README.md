@@ -69,33 +69,33 @@ The result: **module files appear at their stock system paths with absolutely ze
 ## ✨ Features
 
 **Core VFS Engine**
-- [x] 👻 **VFS path redirection** — module files load at stock system paths, zero mount table entries
-- [x] 📂 **Directory entry injection** — module files appear in `ls` and `readdir` like they're stock
-- [x] 🔗 **d_path & mmap spoofing** — `/proc/PID/maps` and fd symlinks show clean metadata
-- [x] 🏷️ **SELinux context injection** — redirected files carry correct labels, no AVC denials
-- [x] 💾 **statfs spoofing** — system partitions report expected EROFS magic
-- [x] 🔀 **3 mount strategies** — VFS (preferred) → OverlayFS (fallback) → MagicMount (last resort)
+- [x] **VFS path redirection** — module files load at stock system paths, zero mount table entries
+- [x] **Directory entry injection** — module files appear in `ls` and `readdir` like they're stock
+- [x] **d_path & mmap spoofing** — `/proc/PID/maps` and fd symlinks show clean metadata
+- [x] **SELinux context injection** — redirected files carry correct labels, no AVC denials
+- [x] **statfs spoofing** — system partitions report expected EROFS magic
+- [x] **3 mount strategies** — VFS (preferred) → OverlayFS (fallback) → MagicMount (last resort)
 
 **SUSFS Integration**
-- [x] 🛡️ **Deep SUSFS integration** — path hiding, kstat spoofing, mount hiding, maps hiding, uname/cmdline spoofing, and more — all toggleable from the WebUI
+- [x] **Deep SUSFS integration** — path hiding, kstat spoofing, mount hiding, maps hiding, uname/cmdline spoofing, and more — all toggleable from the WebUI
 
 **WebUI**
-- [x] 📊 **Full WebUI dashboard** — real-time status, module manager with hot load/unload, app exclusion by UID, and a complete settings panel
-- [x] 🎨 **Themeable** — dark, light, AMOLED, custom accent colors, glass effects
+- [x] **Full WebUI dashboard** — real-time status, module manager with hot load/unload, app exclusion by UID, and a complete settings panel
+- [x] **Themeable** — dark, light, AMOLED, custom accent colors, glass effects
 
 **Safety & Reliability**
-- [x] 🛟 **Bootloop guard** — boot counter + marker thresholds with automatic config rollback and recovery
-- [x] 🔽 **Vol-down safe mode** — hold volume down during boot as a hardware escape hatch
-- [x] 🤝 **Peer module orchestration** — intercepts other module installs/uninstalls for VFS compatibility
-- [x] 💾 **Config backup** — automatic backup before every pipeline run, restored on boot failures
+- [x] **Bootloop guard** — boot counter + marker thresholds with automatic config rollback and recovery
+- [x] **Vol-down safe mode** — hold volume down during boot as a hardware escape hatch
+- [x] **Peer module orchestration** — intercepts other module installs/uninstalls for VFS compatibility
+- [x] **Config backup** — automatic backup before every pipeline run, restored on boot failures
 
 **Extras**
-- [x] 😀 **Custom emoji fonts** — replace system emoji with your own NotoColorEmoji
-- [x] 🔧 **Property spoofing** — build props, verified boot state, cmdline, uname
-- [x] 🥷 **Process camouflage** — ZeroMount process appears as `[kworker/...]` in `ps`
-- [x] ⚡ **Performance tuner** — optional CPU/IO governor optimization daemon
-- [x] 🔄 **OTA updates** — in-manager update support via `updateJson`
-- [x] 🔌 **ADB root** — root shell access in ADB without modifying global system properties
+- [x] **Custom emoji fonts** — replace system emoji with your own NotoColorEmoji
+- [x] **Property spoofing** — build props, verified boot state, cmdline, uname
+- [x] **Process camouflage** — ZeroMount process appears as `[kworker/...]` in `ps`
+- [x] **Performance tuner** — optional CPU/IO governor optimization daemon
+- [x] **OTA updates** — in-manager update support via `updateJson`
+- [x] **ADB root** — root shell access in ADB without modifying global system properties
 
 ---
 
