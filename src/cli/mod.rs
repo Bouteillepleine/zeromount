@@ -211,6 +211,9 @@ pub enum GuardAction {
     /// SystemUI stability monitor (runs continuously)
     #[command(name = "watch-systemui")]
     WatchSystemui,
+    /// Clear recovery lockout (re-enables pipeline after guard recovery)
+    #[command(name = "clear-lockout")]
+    ClearLockout,
     /// Print guard status
     Status,
     /// Force recovery (disable modules + reboot)

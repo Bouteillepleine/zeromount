@@ -94,6 +94,15 @@ export function GuardSection() {
 
       <Show when={expanded()}>
         <div class="guard__body">
+          <Show when={gs().recoveryLockout}>
+            <div class="guard__lockout-banner">
+              <span>{t('guard.lockoutActive')}</span>
+              <button class="guard__lockout-clear" onClick={() => store.guardClearLockout()}>
+                {t('guard.clearLockout')}
+              </button>
+            </div>
+          </Show>
+
           <div class="guard__status-row">
             <span class={markerChipClass(gs().pfdMarkers)}>
               {t('guard.pfd', { current: gs().pfdMarkers, threshold: gs().threshold })}

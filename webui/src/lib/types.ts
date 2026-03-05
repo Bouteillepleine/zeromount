@@ -174,6 +174,7 @@ export interface GuardSettings {
 
 export interface GuardStatus {
   enabled: boolean;
+  recoveryLockout: boolean;
   pfdMarkers: number;
   svcMarkers: number;
   threshold: number;

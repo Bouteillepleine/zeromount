@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::path::Path;
 use std::process::Command;
 
 use crate::core::config::ZeroMountConfig;
@@ -9,6 +10,7 @@ const MODULES_DIR: &str = "/data/adb/modules";
 const SERVICE_D: &str = "/data/adb/service.d";
 const POST_FS_DATA_D: &str = "/data/adb/post-fs-data.d";
 const ACTIVITY_LOG: &str = "/data/adb/zeromount/activity.log";
+const RECOVERY_LOCKOUT: &str = "/data/adb/zeromount/.recovery_lockout";
 
 pub fn execute(config: &ZeroMountConfig) -> ! {
     let mut whitelist: HashSet<&str> = HashSet::new();
@@ -59,8 +61,20 @@ pub fn execute(config: &ZeroMountConfig) -> ! {
 
     super::markers::clear_all().ok();
 
+    // Persistent lockout — survives boot-completed cleanup so the pipeline
+    // stays in safe mode until the user explicitly clears it via CLI/WebUI.
+    let _ = fs::write(RECOVERY_LOCKOUT, timestamp.as_bytes());
+
     let _ = Command::new("/system/bin/svc").args(["power", "reboot"]).status();
     std::process::exit(1);
+}
+
+pub fn is_locked_out() -> bool {
+    Path::new(RECOVERY_LOCKOUT).exists()
+}
+
+pub fn clear_lockout() {
+    let _ = fs::remove_file(RECOVERY_LOCKOUT);
 }
 
 fn neuter_scripts(dir: &str, whitelist: &HashSet<&str>) {

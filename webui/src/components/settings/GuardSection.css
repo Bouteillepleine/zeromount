@@ -78,6 +78,38 @@
   border: 1px solid rgba(255, 152, 0, 0.25);
 }
 
+.guard__lockout-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: rgba(244, 67, 54, 0.12);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  color: #F44336;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.guard__lockout-clear {
+  padding: 5px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(244, 67, 54, 0.4);
+  background: rgba(244, 67, 54, 0.15);
+  color: #F44336;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.guard__lockout-clear:active {
+  background: rgba(244, 67, 54, 0.25);
+}
+
 .guard__recovery {
   margin-bottom: 12px;
   font-style: italic;

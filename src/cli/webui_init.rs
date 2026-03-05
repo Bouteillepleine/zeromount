@@ -31,6 +31,7 @@ struct WebUiInitResponse {
 #[serde(rename_all = "camelCase")]
 struct WebUiGuardStatus {
     pub enabled: bool,
+    pub recovery_lockout: bool,
     pub pfd_markers: u32,
     pub svc_markers: u32,
     pub threshold: u32,
@@ -111,6 +112,7 @@ pub fn handle_webui_init() -> Result<()> {
     let last_recovery = find_last_recovery(&activity);
     let guard = WebUiGuardStatus {
         enabled: config.guard.enabled,
+        recovery_lockout: crate::guard::recovery::is_locked_out(),
         pfd_markers,
         svc_markers,
         threshold: config.guard.marker_threshold,

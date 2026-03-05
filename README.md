@@ -52,7 +52,7 @@ The result: **module files appear at their stock system paths with absolutely ze
 
 ## 🔥 Why ZeroMount?
 
-🛡️ **Bootloop Protection Built In** — Vol-down during boot triggers safe mode instantly. Three failed boots and your config auto-rolls back to the last working state. Problematic modules get disabled automatically. We've all been there — ZeroMount makes sure you can always recover.
+🛡️ **Bootloop Protection Built In** — Hold both volume keys during boot to trigger safe mode instantly. Three failed boots and your config auto-rolls back to the last working state. Problematic modules get disabled automatically. We've all been there — ZeroMount makes sure you can always recover.
 
 👻 **Truly Invisible Module Loading** — Zero entries in `/proc/mounts`. Zero entries in `/proc/self/mountinfo`. File metadata, SELinux contexts, and filesystem types all match stock. Detection apps see nothing because there's nothing to see.
 
@@ -85,7 +85,7 @@ The result: **module files appear at their stock system paths with absolutely ze
 
 **Safety & Reliability**
 - [x] **Bootloop guard** — boot counter + marker thresholds with automatic config rollback and recovery
-- [x] **Vol-down safe mode** — hold volume down during boot as a hardware escape hatch
+- [x] **Vol-combo safe mode** — hold both volume keys during boot as a hardware escape hatch
 - [x] **Peer module orchestration** — intercepts other module installs/uninstalls for VFS compatibility
 - [x] **Config backup** — automatic backup before every pipeline run, restored on boot failures
 

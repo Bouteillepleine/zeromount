@@ -67,8 +67,8 @@ function createAppStore() {
   const [bridgeValues, setBridgeValues] = createSignal<BridgeValues | null>(null);
   const [verboseDumpPath, setVerboseDumpPath] = createSignal<string | null>(null);
   const [guardStatus, setGuardStatus] = createSignal<GuardStatus>({
-    enabled: true, pfdMarkers: 0, svcMarkers: 0, threshold: 2,
-    lastRecovery: null, allowedModules: ['meta-zeromount'],
+    enabled: true, recoveryLockout: false, pfdMarkers: 0, svcMarkers: 0,
+    threshold: 2, lastRecovery: null, allowedModules: ['meta-zeromount'],
   });
 
   const savedBgOpacity = typeof window !== 'undefined'
@@ -960,6 +960,16 @@ function createAppStore() {
     }
   };
 
+  const guardClearLockout = async () => {
+    try {
+      await ksuExec(`${PATHS.BINARY} guard clear-lockout`);
+      setGuardStatus(prev => ({ ...prev, recoveryLockout: false, pfdMarkers: 0, svcMarkers: 0 }));
+      showToast(t('toast.lockoutCleared'), 'success');
+    } catch {
+      showToast(t('toast.failedClearLockout'), 'error');
+    }
+  };
+
   const setUnameMode = async (mode: UnameMode) => {
     const prev = settings.uname.mode;
     setSettings('uname', 'mode', mode);
@@ -1529,6 +1539,7 @@ function createAppStore() {
     guardStatus,
     guardAllowModule,
     guardDisallowModule,
+    guardClearLockout,
     emojiConflict,
     setUnameMode,
     setUnameField,

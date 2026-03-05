@@ -34,6 +34,10 @@ pub fn handle_guard(action: GuardAction) -> Result<()> {
         GuardAction::Clear => {
             markers::clear_all()?;
         }
+        GuardAction::ClearLockout => {
+            markers::clear_all()?;
+            recovery::clear_lockout();
+        }
         GuardAction::WatchBoot => {
             monitors::wait_boot_completed(&config)?;
         }
@@ -68,6 +72,7 @@ fn print_status(config: &ZeroMountConfig) -> Result<()> {
     let (pfd, svc) = markers::status();
     let threshold = config.guard.marker_threshold;
     println!("enabled: {}", config.guard.enabled);
+    println!("recovery_lockout: {}", recovery::is_locked_out());
     println!("markers: pfd={pfd}/{threshold} svc={svc}/{threshold}");
     println!("allowed_modules: {}", config.guard.allowed_modules.join(", "));
     if !config.guard.allowed_scripts.is_empty() {

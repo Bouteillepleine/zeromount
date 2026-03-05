@@ -42,8 +42,10 @@ _bg_pids="$_bg_pids $!"
 if command -v getevent >/dev/null 2>&1; then
     {
         while [ "$(getprop sys.boot_completed)" != "1" ]; do
-            if timeout 1 getevent -lqn 2>/dev/null | grep -q 'KEY_VOLUMEDOWN.*DOWN'; then
-                echo "zeromount: vol-down safe mode triggered (service), running guard recovery" > /dev/kmsg 2>/dev/null
+            _keys=$(timeout 1 getevent -lq 2>/dev/null || true)
+            if echo "$_keys" | grep -q 'KEY_VOLUMEDOWN.*DOWN' && \
+               echo "$_keys" | grep -q 'KEY_VOLUMEUP.*DOWN'; then
+                echo "zeromount: vol-up+down safe mode triggered (service), running guard recovery" > /dev/kmsg 2>/dev/null
                 "$BIN" guard recover 2>/dev/null
                 break
             fi
