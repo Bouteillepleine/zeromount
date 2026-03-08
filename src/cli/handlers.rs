@@ -165,6 +165,63 @@ pub fn handle_module(action: ModuleAction) -> Result<()> {
                 tracing::debug!("partitions.conf rebuild requested");
             }
         }
+        ModuleAction::Unload { id } => {
+            let status_path = Path::new("/data/adb/zeromount/.status.json");
+            let mut state = crate::core::types::RuntimeState::read_status_file(status_path)
+                .unwrap_or_default();
+
+            let module = state.modules.iter().find(|m| m.id == id);
+            let Some(module) = module else {
+                println!("{{\"error\":\"module_not_found\",\"id\":\"{id}\"}}");
+                return Ok(());
+            };
+
+            let strategy = module.strategy;
+            let mount_paths = module.mount_paths.clone();
+            let mut removed = 0u32;
+
+            match strategy {
+                crate::core::types::MountStrategy::Vfs => {
+                    if let Ok(driver) = crate::vfs::VfsDriver::open() {
+                        let module_prefix = format!("/data/adb/modules/{id}/");
+                        if let Ok(list) = driver.get_list() {
+                            for line in list.lines() {
+                                if let Some(idx) = line.find("->") {
+                                    let source = line[..idx].trim();
+                                    let target = line[idx + 2..].trim();
+                                    if source.starts_with(&module_prefix) {
+                                        let vp = Path::new(target);
+                                        if driver.del_rule(vp, vp).is_ok() {
+                                            removed += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                crate::core::types::MountStrategy::Overlay
+                | crate::core::types::MountStrategy::MagicMount => {
+                    for path in &mount_paths {
+                        if crate::core::pipeline::try_detach_mount(path) {
+                            removed += 1;
+                        }
+                    }
+                }
+                crate::core::types::MountStrategy::Font => {
+                    crate::core::pipeline::try_detach_mount("/system/fonts");
+                    removed = 1;
+                }
+            }
+
+            state.modules.retain(|m| m.id != id);
+            state.font_modules.retain(|f| f != &id);
+            let _ = state.write_status_file(status_path);
+
+            println!(
+                "{{\"removed\":{removed},\"strategy\":\"{strategy:?}\"}}",
+            );
+        }
     }
     Ok(())
 }
@@ -499,6 +556,66 @@ pub fn handle_bridge(action: BridgeAction) -> Result<()> {
         }
     }
     Ok(())
+}
+
+pub fn handle_sync_description() -> Result<()> {
+    let config = crate::core::config::ZeroMountConfig::load(None)?;
+    let ds = crate::core::desc_strings::desc_strings(&config.ui.language);
+
+    let module_ids = match crate::vfs::VfsDriver::open() {
+        Ok(driver) => {
+            let list = driver.get_list().unwrap_or_default();
+            extract_module_ids_from_vfs(&list)
+        }
+        Err(_) => Vec::new(),
+    };
+
+    let desc = if module_ids.is_empty() {
+        format!("😴 {} | Mountless VFS-level Redirection. GHOST👻", ds.idle)
+    } else {
+        let label = if module_ids.len() == 1 { ds.module_singular } else { ds.module_plural };
+        format!("✅ GHOST ⚡️ | {} {} | {}", module_ids.len(), label, module_ids.join(", "))
+    };
+
+    crate::utils::platform::write_description_to_module_prop(&desc)?;
+
+    // Live KSU/APatch Manager update via ksud override
+    let ksud = if Path::new("/data/adb/ksu/bin/ksud").exists() {
+        "/data/adb/ksu/bin/ksud"
+    } else if Path::new("/data/adb/ap/bin/ksud").exists() {
+        "/data/adb/ap/bin/ksud"
+    } else {
+        "ksud"
+    };
+
+    let _ = std::process::Command::new(ksud)
+        .args(["module", "config", "set", "override.description", &desc])
+        .env("KSU_MODULE", "meta-zeromount")
+        .output();
+
+    println!("{desc}");
+    Ok(())
+}
+
+fn extract_module_ids_from_vfs(list: &str) -> Vec<String> {
+    use std::collections::BTreeSet;
+    let prefix = "/data/adb/modules/";
+    let mut ids = BTreeSet::new();
+    for line in list.lines() {
+        for part in line.split("->") {
+            let trimmed = part.trim();
+            if let Some(pos) = trimmed.find(prefix) {
+                let after = &trimmed[pos + prefix.len()..];
+                if let Some(slash) = after.find('/') {
+                    let id = &after[..slash];
+                    if !id.is_empty() && id != "meta-zeromount" {
+                        ids.insert(id.to_string());
+                    }
+                }
+            }
+        }
+    }
+    ids.into_iter().collect()
 }
 
 pub fn handle_emoji(action: EmojiAction) -> Result<()> {

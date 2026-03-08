@@ -90,6 +90,9 @@ pub enum Commands {
         #[command(subcommand)]
         action: GuardAction,
     },
+    /// Sync module description to module.prop + KSU Manager (live update)
+    #[command(name = "sync-description")]
+    SyncDescription,
     /// Print version
     Version,
 }
@@ -126,6 +129,11 @@ pub enum ModuleAction {
         /// Clean VFS rules and SUSFS entries for an uninstalled module
         #[arg(long)]
         cleanup: Option<String>,
+    },
+    /// Hot-unload a module (unmount + remove VFS rules)
+    Unload {
+        /// Module ID (directory name under /data/adb/modules/)
+        id: String,
     },
 }
 

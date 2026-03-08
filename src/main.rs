@@ -70,6 +70,7 @@ fn main() -> Result<()> {
         Commands::TryUmount => cli::handlers::handle_try_umount(),
         Commands::WebUiInit => cli::webui_init::handle_webui_init(),
         Commands::Guard { action } => guard::handle_guard(action),
+        Commands::SyncDescription => cli::handlers::handle_sync_description(),
         Commands::Version => {
             println!("zeromount v{}", read_version_from_prop());
             Ok(())
