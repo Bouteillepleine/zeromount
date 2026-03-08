@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.0.160-dev
+
+- Fix SAR partition promotion for bind-mounted partitions (product, system_ext, vendor, odm now visible in overlay and magic mount modes on devices where /system/product is a bind mount instead of a symlink)
+- Fix kernel `auto_inject_parent` duplicate directory entries — skip registration when path already exists on real filesystem (patched across all KernelSU-Next, ReSukiSU, SukiSU-Ultra, WildKSU variants)
+- Add VFS rule injection for novel directories and opaque-dir replacements (previously skipped, relying only on kernel-side readdir injection)
+- Add hybrid overlay+VFS fallback — when overlay mounts fail on novel targets, VFS rules fill the gap
+- Detect `.replace` sentinel files for opaque directory classification (previously only xattr-based detection)
+- Add `module unload <id>` CLI command for hot-unloading modules without reboot
+- Add `sync-description` CLI command for live KSU/APatch Manager description updates
+- WebUI module unload now routes through CLI backend instead of manual VFS rule deletion
+- Auto-resume normal guard operation after clean boot post-recovery
+
 ## v2.0.146-dev
 
 - Detect and uninstall conflicting metamodules during installation
