@@ -121,10 +121,56 @@ impl VfsExecutor {
                 ModuleFileType::Regular
                 | ModuleFileType::Symlink
                 | ModuleFileType::RedirectXattr => {}
-                // auto_inject_parent handles directory visibility in readdir
-                ModuleFileType::Directory => continue,
-                // OpaqueDir needs both SUSFS hide + VFS redirect — not yet supported
-                ModuleFileType::OpaqueDir => continue,
+                ModuleFileType::Directory => {
+                    let source = module.path.join(&file.relative_path);
+                    let target = match resolve_target_path(&file.relative_path) {
+                        Some(t) => t,
+                        None => continue,
+                    };
+                    if target.exists() {
+                        continue;
+                    }
+                    match self.driver.add_rule(&target, &source, true) {
+                        Ok(()) => {
+                            applied += 1;
+                            mount_paths.push(target.display().to_string());
+                        }
+                        Err(e) => {
+                            debug!(
+                                module = %module.id,
+                                target = %target.display(),
+                                error = %e,
+                                "dir rule failed"
+                            );
+                            failed += 1;
+                            if error.is_none() {
+                                error = Some(format!("dir rule failure: {e}"));
+                            }
+                        }
+                    }
+                    continue;
+                }
+                ModuleFileType::OpaqueDir => {
+                    let source = module.path.join(&file.relative_path);
+                    if let Some(target) = resolve_target_path(&file.relative_path) {
+                        match self.driver.add_rule(&target, &source, true) {
+                            Ok(()) => {
+                                applied += 1;
+                                mount_paths.push(target.display().to_string());
+                            }
+                            Err(e) => {
+                                debug!(
+                                    module = %module.id,
+                                    target = %target.display(),
+                                    error = %e,
+                                    "opaque dir redirect failed"
+                                );
+                                failed += 1;
+                            }
+                        }
+                    }
+                    continue;
+                }
                 _ => continue,
             }
 
