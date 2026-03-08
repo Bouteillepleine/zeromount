@@ -195,7 +195,7 @@ fn classify_file(path: &Path) -> ModuleFileType {
     }
 
     if ft.is_dir() {
-        if has_xattr(path, "trusted.overlay.opaque", "y") {
+        if has_xattr(path, "trusted.overlay.opaque", "y") || path.join(".replace").exists() {
             return ModuleFileType::OpaqueDir;
         }
         return ModuleFileType::Directory;
