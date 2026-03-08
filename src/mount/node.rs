@@ -158,15 +158,18 @@ fn promote_partitions(root: &mut Node) {
     };
 
     for &partition in PROMOTABLE_PARTITIONS {
-        let real_path = Path::new("/system").join(partition);
-        if !real_path.is_symlink() {
+        // Promote when the canonical mount point exists — handles both
+        // symlinks (/system/product -> /product) and bind mounts where
+        // the symlink is shadowed but /<partition> is still the real path.
+        let canonical = Path::new("/").join(partition);
+        if !canonical.is_dir() {
             continue;
         }
 
         if let Some(promoted) = system.children.remove(partition) {
             debug!(
                 partition,
-                "promoting /system/{} to /{} (real path is symlink)", partition, partition
+                "promoting /system/{} to /{}", partition, partition
             );
 
             if let Some(existing) = root.children.get_mut(partition) {

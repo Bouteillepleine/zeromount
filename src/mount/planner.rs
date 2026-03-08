@@ -214,7 +214,7 @@ const SENSITIVE_SUBPATHS: &[&str] = &["vendor", "product", "system_ext", "odm"];
 /// Mount paths are canonicalized to resolve SAR symlinks (e.g., /system/vendor → /vendor).
 /// Staging-relative paths are tracked separately so the executor can locate staged files.
 fn bfs_mount_points(partition: &str, root: &DirNode) -> Vec<PartitionMount> {
-    let mut mounts = Vec::new();
+    let mut mounts: Vec<PartitionMount> = Vec::new();
 
     // Queue: (canonical_mount_path, staging_rel, node, force_descend)
     let mut queue: VecDeque<(PathBuf, PathBuf, &DirNode, bool)> = VecDeque::new();
@@ -231,23 +231,34 @@ fn bfs_mount_points(partition: &str, root: &DirNode) -> Vec<PartitionMount> {
         let mount_here = !force_descend && (node.has_files || should_mount_here(node));
 
         if mount_here {
+            // Overlay can't mount on non-existent targets — elevate to parent
+            let (mp, sr) = elevate_novel_target(&path, &staging_rel);
+
             let contributors: Vec<String> = collect_all_modules(node)
                 .into_iter()
                 .collect();
 
-            debug!(
-                mount_point = %path.display(),
-                staging_rel = %staging_rel.display(),
-                modules = contributors.len(),
-                "planned mount point"
-            );
+            if let Some(existing) = mounts.iter_mut().find(|m| m.mount_point == mp) {
+                for c in contributors {
+                    if !existing.contributing_modules.contains(&c) {
+                        existing.contributing_modules.push(c);
+                    }
+                }
+            } else {
+                debug!(
+                    mount_point = %mp.display(),
+                    staging_rel = %sr.display(),
+                    modules = contributors.len(),
+                    "planned mount point"
+                );
 
-            mounts.push(PartitionMount {
-                partition: partition.to_string(),
-                mount_point: path,
-                staging_rel,
-                contributing_modules: contributors,
-            });
+                mounts.push(PartitionMount {
+                    partition: partition.to_string(),
+                    mount_point: mp,
+                    staging_rel: sr,
+                    contributing_modules: contributors,
+                });
+            }
         } else if has_any_contributors(node) {
             if force_descend {
                 debug!(mount_point = %path.display(), "sensitive partition path — descending to subdirs");
@@ -264,6 +275,29 @@ fn bfs_mount_points(partition: &str, root: &DirNode) -> Vec<PartitionMount> {
     }
 
     mounts
+}
+
+fn elevate_novel_target(path: &Path, staging_rel: &Path) -> (PathBuf, PathBuf) {
+    if path.exists() {
+        return (path.to_path_buf(), staging_rel.to_path_buf());
+    }
+    let mut p = path.to_path_buf();
+    let mut r = staging_rel.to_path_buf();
+    while !p.exists() {
+        match (p.parent(), r.parent()) {
+            (Some(pp), Some(rr)) if !rr.as_os_str().is_empty() => {
+                p = pp.to_path_buf();
+                r = rr.to_path_buf();
+            }
+            _ => break,
+        }
+    }
+    debug!(
+        novel = %path.display(),
+        elevated = %p.display(),
+        "novel overlay target elevated to existing ancestor"
+    );
+    (p, r)
 }
 
 /// Decide if we should place a mount at this node rather than descending further.
@@ -290,13 +324,27 @@ fn should_mount_here(node: &DirNode) -> bool {
     false
 }
 
-/// Build the raw filesystem path for a partition + subpath.
-/// The result is later canonicalized to resolve SAR symlinks.
+const SAR_ALIAS_PARTITIONS: &[&str] = &["vendor", "product", "system_ext", "odm"];
+
 fn resolve_partition_path(partition: &str, subpath: &str) -> PathBuf {
-    match partition {
-        "system" => Path::new("/system").join(subpath),
-        _ => PathBuf::from(format!("/{}", partition)).join(subpath),
+    if partition == "system" {
+        if SAR_ALIAS_PARTITIONS.contains(&subpath) {
+            let canonical = Path::new("/").join(subpath);
+            if canonical.is_dir() {
+                return canonical;
+            }
+        }
+        if let Some((alias, rest)) = subpath.split_once('/') {
+            if SAR_ALIAS_PARTITIONS.contains(&alias) {
+                let canonical = Path::new("/").join(alias);
+                if canonical.is_dir() {
+                    return canonical.join(rest);
+                }
+            }
+        }
+        return Path::new("/system").join(subpath);
     }
+    PathBuf::from(format!("/{}", partition)).join(subpath)
 }
 
 /// Canonicalize a path, resolving all symlinks. Falls back to the raw path
