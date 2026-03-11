@@ -1,0 +1,126 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - '.github/workflows/build.yaml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  NDK_VERSION: r27c
+  NDK_HOME: /opt/ndk
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        profile: [debug, release]
+        target:
+          - aarch64-linux-android
+          - armv7-linux-androideabi
+          - x86_64-linux-android
+          - i686-linux-android
+        include:
+          - target: aarch64-linux-android
+            abi: arm64-v8a
+            linker: aarch64-linux-android26-clang
+          - target: armv7-linux-androideabi
+            abi: armeabi-v7a
+            linker: armv7a-linux-androideabi26-clang
+          - target: x86_64-linux-android
+            abi: x86_64
+            linker: x86_64-linux-android26-clang
+          - target: i686-linux-android
+            abi: x86
+            linker: i686-linux-android26-clang
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install NDK
+        run: |
+          curl -sSfL "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip" -o ndk.zip
+          unzip -q ndk.zip -d /opt
+          mv /opt/android-ndk-${NDK_VERSION} ${NDK_HOME}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ matrix.target }}-${{ matrix.profile }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ matrix.target }}-${{ matrix.profile }}-
+
+      - name: Build
+        run: |
+          export PATH="${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          FLAGS=""
+          if [ "$PROFILE" = "release" ]; then
+            FLAGS="--release"
+          fi
+          cargo build $FLAGS --target "$TARGET"
+        env:
+          PROFILE: ${{ matrix.profile }}
+          TARGET: ${{ matrix.target }}
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: /opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang
+          CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER: /opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang
+          CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER: /opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
+          CARGO_TARGET_I686_LINUX_ANDROID_LINKER: /opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android26-clang
+
+      - name: Verify binary
+        run: |
+          bin="target/${TARGET}/${PROFILE}/zeromount"
+          file "$bin"
+          ls -lh "$bin"
+        env:
+          TARGET: ${{ matrix.target }}
+          PROFILE: ${{ matrix.profile }}
+
+      - name: Assert debug info preserved
+        if: matrix.profile == 'debug'
+        run: |
+          bin="target/${TARGET}/debug/zeromount"
+          if ! readelf -S "$bin" | grep -q debug_info; then
+            echo "::error::debug binary missing debug_info section"
+            exit 1
+          fi
+        env:
+          TARGET: ${{ matrix.target }}
+
+      - name: Assert stripped
+        if: matrix.profile == 'release'
+        run: |
+          bin="target/${TARGET}/release/zeromount"
+          if readelf -S "$bin" | grep -q debug_info; then
+            echo "::error::release binary still contains debug_info"
+            exit 1
+          fi
+        env:
+          TARGET: ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zeromount-${{ matrix.abi }}-${{ matrix.profile }}
+          path: target/${{ matrix.target }}/${{ matrix.profile }}/zeromount
+          retention-days: 30
