@@ -8,6 +8,10 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.cargo/**'
+      - 'module/**'
+      - 'webui/**'
+      - 'external/axon/**'
+      - 'scripts/package.sh'
       - '.github/workflows/build.yaml'
   pull_request:
     branches: [master]
@@ -37,16 +41,12 @@ jobs:
         include:
           - target: aarch64-linux-android
             abi: arm64-v8a
-            linker: aarch64-linux-android26-clang
           - target: armv7-linux-androideabi
             abi: armeabi-v7a
-            linker: armv7a-linux-androideabi26-clang
           - target: x86_64-linux-android
             abi: x86_64
-            linker: x86_64-linux-android26-clang
           - target: i686-linux-android
             abi: x86
-            linker: i686-linux-android26-clang
 
     steps:
       - uses: actions/checkout@v4
@@ -61,7 +61,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+          targets: ${{ matrix.target }}
 
       - uses: actions/cache@v4
         with:
@@ -88,19 +88,11 @@ jobs:
           CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER: /opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
           CARGO_TARGET_I686_LINUX_ANDROID_LINKER: /opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android26-clang
 
-      - name: Verify binary
-        run: |
-          bin="target/${TARGET}/${PROFILE}/zeromount"
-          file "$bin"
-          ls -lh "$bin"
-        env:
-          TARGET: ${{ matrix.target }}
-          PROFILE: ${{ matrix.profile }}
-
       - name: Assert debug info preserved
         if: matrix.profile == 'debug'
         run: |
           bin="target/${TARGET}/debug/zeromount"
+          file "$bin"
           if ! readelf -S "$bin" | grep -q debug_info; then
             echo "::error::debug binary missing debug_info section"
             exit 1
@@ -112,6 +104,7 @@ jobs:
         if: matrix.profile == 'release'
         run: |
           bin="target/${TARGET}/release/zeromount"
+          file "$bin"
           if readelf -S "$bin" | grep -q debug_info; then
             echo "::error::release binary still contains debug_info"
             exit 1
@@ -121,6 +114,156 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: zeromount-${{ matrix.abi }}-${{ matrix.profile }}
+          name: bin-${{ matrix.abi }}-${{ matrix.profile }}
           path: target/${{ matrix.target }}/${{ matrix.profile }}/zeromount
+          retention-days: 7
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install NDK
+        run: |
+          curl -sSfL "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip" -o ndk.zip
+          unzip -q ndk.zip -d /opt
+          mv /opt/android-ndk-${NDK_VERSION} ${NDK_HOME}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build WebUI
+        run: cd webui && npm install && npm run build
+
+      - name: Build axon
+        run: |
+          export PATH="${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          AXON=external/axon
+          if [ ! -f "$AXON/inject.c" ]; then
+            echo "axon source not found, skipping"
+            exit 0
+          fi
+
+          for pair in "arm64-v8a:aarch64-linux-android" "x86_64:x86_64-linux-android"; do
+            abi="${pair%%:*}"
+            prefix="${pair##*:}"
+            cc="${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/${prefix}23-clang"
+            ar="${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+            out="target/axon/$abi"
+            mkdir -p "$out" "module/bin/$abi" "module/lib/$abi"
+
+            CFLAGS="-fvisibility=hidden -Os -DANDROID"
+            "$cc" $CFLAGS -c "$AXON/external/plthook/plthook_elf.c" \
+              -I"$AXON/external/plthook" -o "$out/plthook_elf.o"
+            "$ar" rcs "$out/libplthook.a" "$out/plthook_elf.o"
+
+            "$cc" $CFLAGS -s "$AXON/inject.c" "$AXON/ptrace.c" "$AXON/utils.c" \
+              -o "$out/axon_inject"
+            "$cc" $CFLAGS -shared -s "$AXON/axon_init.c" "$AXON/utils.c" \
+              -I"$AXON/external/plthook" -L"$out" -lplthook \
+              -o "$out/libaxon_init.so"
+            "$cc" $CFLAGS -shared -s "$AXON/axon_adbd.c" "$AXON/utils.c" \
+              -ldl -o "$out/libaxon_adbd.so"
+
+            cp "$out/axon_inject" "module/bin/$abi/"
+            cp "$out/libaxon_init.so" "module/lib/$abi/"
+            cp "$out/libaxon_adbd.so" "module/lib/$abi/"
+          done
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Place binaries into target tree
+        run: |
+          declare -A ABI_TARGET=(
+            [arm64-v8a]=aarch64-linux-android
+            [armeabi-v7a]=armv7-linux-androideabi
+            [x86_64]=x86_64-linux-android
+            [x86]=i686-linux-android
+          )
+          for profile in debug release; do
+            for abi in arm64-v8a armeabi-v7a x86_64 x86; do
+              target="${ABI_TARGET[$abi]}"
+              src="artifacts/bin-${abi}-${profile}/zeromount"
+              dst="target/${target}/${profile}/zeromount"
+              mkdir -p "$(dirname "$dst")"
+              cp "$src" "$dst"
+              chmod +x "$dst"
+            done
+          done
+
+      - name: Read version
+        id: ver
+        run: |
+          ver=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=v${ver}" >> "$GITHUB_OUTPUT"
+
+      - name: Package ZIPs
+        run: scripts/package.sh --version "$VER"
+        env:
+          VER: ${{ steps.ver.outputs.version }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zeromount-release-zip
+          path: release/release/zeromount-*.zip
           retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zeromount-debug-zip
+          path: release/debug/zeromount-*.zip
+          retention-days: 30
+
+  release:
+    needs: [build, package]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: ver
+        run: |
+          ver=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=v${ver}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: zeromount-release-zip
+          path: zips/release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: zeromount-debug-zip
+          path: zips/debug
+
+      - name: Extract changelog
+        id: notes
+        run: |
+          ver="${VER#v}"
+          awk "/^## v${ver}/{flag=1; next} /^## v/{if(flag) exit} flag" CHANGELOG.md > /tmp/notes.md
+          cat /tmp/notes.md
+        env:
+          VER: ${{ steps.ver.outputs.version }}
+
+      - name: Create release
+        run: |
+          gh release delete "$VER" --yes 2>/dev/null || true
+          gh release create "$VER" \
+            --title "$VER" \
+            --latest \
+            --notes-file /tmp/notes.md \
+            zips/release/*.zip \
+            zips/debug/*.zip
+        env:
+          VER: ${{ steps.ver.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
