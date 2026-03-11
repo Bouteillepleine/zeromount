@@ -57,21 +57,17 @@ fi
 PROP_SPOOF=$("$BIN" config get brene.prop_spoofing 2>/dev/null)
 
 if [ "$PROP_SPOOF" = "true" ]; then
-    if command -v resetprop >/dev/null 2>&1; then
-        {
-            while true; do
-                "$BIN" prop-watch
-                rc=$?
-                [ $rc -eq 0 ] && break
-                echo "zeromount: prop-watch crashed ($rc), restarting" > /dev/kmsg 2>/dev/null
-                sleep 1
-            done
-        } &
-        _bg_pids="$_bg_pids $!"
-        echo "zeromount: prop-watch daemon started (pid $!)" > /dev/kmsg 2>/dev/null
-    else
-        echo "zeromount: resetprop not found, skipping prop-watch" > /dev/kmsg 2>/dev/null
-    fi
+    {
+        while true; do
+            "$BIN" prop-watch
+            rc=$?
+            [ $rc -eq 0 ] && break
+            echo "zeromount: prop-watch crashed ($rc), restarting" > /dev/kmsg 2>/dev/null
+            sleep 1
+        done
+    } &
+    _bg_pids="$_bg_pids $!"
+    echo "zeromount: prop-watch daemon started (pid $!)" > /dev/kmsg 2>/dev/null
 fi
 
 # Performance tuning + input boost daemon (Rust-native, auto-detects device)

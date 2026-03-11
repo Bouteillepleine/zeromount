@@ -1,28 +1,12 @@
-use std::process::Command;
-
+use resetprop::PropSystem;
 use tracing::trace;
 
-pub(super) fn enforce_once(props: &[(&str, &str)]) {
+pub(super) fn enforce_once(sys: &PropSystem, props: &[(&str, &str)]) {
     for &(name, value) in props {
-        let current = getprop(name);
+        let current = sys.get(name);
         if current.as_deref() != Some(value) {
             trace!(prop = name, from = ?current, to = value, "enforce");
-            resetprop(name, value);
+            let _ = sys.set(name, value);
         }
     }
-}
-
-pub(super) fn resetprop(name: &str, value: &str) {
-    let _ = Command::new("resetprop")
-        .args(["-n", name, value])
-        .output();
-}
-
-fn getprop(name: &str) -> Option<String> {
-    Command::new("getprop")
-        .arg(name)
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .filter(|s| !s.is_empty())
 }

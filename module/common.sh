@@ -23,6 +23,7 @@ fi
 
 if [ -n "$MODDIR" ] && [ -n "$ABI" ]; then
     BIN="$MODDIR/bin/${ABI}/zeromount"
+    RP="$MODDIR/bin/${ABI}/resetprop-rs"
 fi
 
 # USAGE: susfs_hexpatch_prop_name <prop name> <search value> <replace value>
