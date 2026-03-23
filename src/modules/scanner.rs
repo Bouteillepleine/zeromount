@@ -52,7 +52,7 @@ pub fn scan_modules(modules_dir: &Path) -> Result<Vec<ScannedModule>> {
             };
             !BLACKLISTED_NAMES.contains(&name)
         })
-        .filter(|p| is_module_enabled(p) && !has_skip_mount(p))
+        .filter(|p| is_module_enabled(p) && !has_skip_mount(p) && !has_manual_mounts(p))
         .collect();
 
     // Filesystem corruption can create duplicate directory entries (same inode).
@@ -342,5 +342,27 @@ pub fn is_module_enabled(module_dir: &Path) -> bool {
 
 pub fn has_skip_mount(module_dir: &Path) -> bool {
     module_dir.join("skip_mount").exists()
+}
+
+fn has_manual_mounts(module_dir: &Path) -> bool {
+    use std::io::{BufRead, BufReader};
+
+    for name in &["post-fs-data.sh", "service.sh"] {
+        let path = module_dir.join(name);
+        let file = match fs::File::open(&path) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        for line in BufReader::new(file).lines().map_while(Result::ok) {
+            let trimmed = line.trim();
+            if !trimmed.starts_with('#')
+                && (trimmed.contains("mount ") || trimmed.contains("--bind"))
+            {
+                debug!(module = %module_dir.display(), script = name, "detected manual mount, skipping");
+                return true;
+            }
+        }
+    }
+    false
 }
 
