@@ -542,19 +542,9 @@ impl MountController<Mounted> {
             .find(|m| m.strategy != MountStrategy::Font)
             .map(|m| m.strategy);
 
-        let no_vfs = matches!(det.scenario, Scenario::None | Scenario::SusfsOnly);
-        let degraded = total_failed > 0 || no_vfs;
-        let degradation_reason = if det.scenario == Scenario::None {
-            info!("degraded: no VFS driver, no SUSFS");
-            Some("no VFS driver detected".to_string())
-        } else if det.scenario == Scenario::SusfsOnly {
-            info!(
-                susfs_version = ?det.capabilities.susfs_version,
-                "degraded: no VFS driver, SUSFS protections active"
-            );
-            Some("no VFS driver, SUSFS protections active".to_string())
-        } else if total_failed > 0 {
-            warn!(total_failed, "degraded: rules failed to apply");
+        let degraded = total_failed > 0;
+        let degradation_reason = if total_failed > 0 {
+            warn!(total_failed, "rules failed to apply");
             Some(format!("{total_failed} rules failed to apply"))
         } else {
             None
@@ -862,11 +852,8 @@ mod tests {
         };
 
         let state = ctrl.build_runtime_state(&[]);
-        assert!(state.degraded);
-        assert_eq!(
-            state.degradation_reason.as_deref(),
-            Some("no VFS driver detected")
-        );
+        assert!(!state.degraded);
+        assert!(state.degradation_reason.is_none());
         assert_eq!(state.scenario, Scenario::None);
     }
 

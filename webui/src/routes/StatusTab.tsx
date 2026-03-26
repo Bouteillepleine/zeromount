@@ -532,7 +532,7 @@ export function StatusTab() {
       {/* System Health */}
       <Card>
         <h3 class="status-section__header color-text-secondary">
-          {t('status.systemHealth')}
+          {t('status.engineStatus')}
         </h3>
         <div class="status-health">
           <div>
@@ -551,10 +551,10 @@ export function StatusTab() {
               {store.settings.susfs.enabled
                 ? (store.capabilities?.()?.susfs_kstat_redirect
                     ? t('status.healthSusfsExtendedAll')
-                    : t('status.healthSusfsStockLimited'))
+                    : t('status.healthSusfsActive'))
                 : store.systemInfo.susfsVersion && store.systemInfo.susfsVersion !== 'N/A'
                   ? t('status.healthSusfsAvailableDisabled')
-                  : t('status.healthSusfsNotRunning')}
+                  : t('status.healthSusfsNotDetected')}
             </div>
             <Show when={store.settings.susfs.enabled && store.capabilities?.()}>
               <div class="status-health__features">
@@ -567,12 +567,12 @@ export function StatusTab() {
                     { key: 'path', active: caps.susfs_path },
                     { key: 'maps', active: caps.susfs_maps },
                     { key: 'kstat_redirect', active: caps.susfs_kstat_redirect },
-                  ];
+                  ].filter(f => f.active);
                   return (
                     <For each={features}>
                       {(f) => (
-                        <span class={`status-health__feat-chip ${f.active ? 'status-health__feat-chip--active' : 'status-health__feat-chip--missing'}`}>
-                          {f.active ? '\u2713' : '\u2717'} {f.key}
+                        <span class="status-health__feat-chip status-health__feat-chip--active">
+                          {'\u2713'} {f.key}
                         </span>
                       )}
                     </For>
@@ -591,11 +591,11 @@ export function StatusTab() {
                   {t('status.levelWarning')}
                 </span>
                 <span class="status-health__title color-text-primary">
-                  {t('status.healthDegraded')}
+                  {t('status.healthRuleFailures')}
                 </span>
               </div>
-              <div class="status-health__message color-text-secondary">
-                {store.degradationReason() || t('status.healthDegradedDefault')}
+              <div class="status-health__message status-health__message--warning color-text-secondary">
+                {store.degradationReason()}
               </div>
             </div>
           </Show>
@@ -604,16 +604,16 @@ export function StatusTab() {
               <div class="status-health__item-header">
                 <span
                   class="status-health__level"
-                  style={{ color: store.currentTheme().colorWarning }}
+                  style={{ color: store.currentTheme().colorInfo || '#3b82f6' }}
                 >
-                  {t('status.levelWarning')}
+                  {t('status.levelInfo')}
                 </span>
                 <span class="status-health__title color-text-primary">
                   {t('status.healthRules')}
                 </span>
               </div>
-              <div class="status-health__message status-health__message--warning color-text-secondary">
-                {t('status.healthNoRules')}
+              <div class="status-health__message color-text-secondary">
+                {t('status.healthNoRulesHint')}
               </div>
             </div>
           </Show>
@@ -695,9 +695,20 @@ export function StatusTab() {
               <span class="status-info__label color-text-tertiary">{t('status.infoKernel')}</span>
               <span class="color-text-primary">{store.systemInfo.kernelVersion}</span>
             </div>
+            <Show when={store.systemInfo.driverVersion}>
+              <div>
+                <span class="status-info__label color-text-tertiary">{t('status.infoDriver')}</span>
+                <span class="color-text-accent">{store.systemInfo.driverVersion}</span>
+              </div>
+            </Show>
             <div>
-              <span class="status-info__label color-text-tertiary">{t('status.infoDriver')}</span>
-              <span class="color-text-accent">{store.systemInfo.driverVersion}</span>
+              <span class="status-info__label color-text-tertiary">{t('status.infoEngine')}</span>
+              <span class="color-text-accent">
+                {(() => {
+                  const s = store.runtimeStrategy() || store.effectiveStrategy();
+                  return s === 'Vfs' ? 'VFS' : s === 'Overlay' ? 'OverlayFS' : s === 'MagicMount' ? 'MagicMount' : 'Auto';
+                })()}
+              </span>
             </div>
             <div>
               <span class="status-info__label color-text-tertiary">{t('status.infoSusfs')}</span>
