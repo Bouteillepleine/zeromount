@@ -32,20 +32,26 @@ pub fn run_prop_watch() -> Result<()> {
         }
     };
 
+    enforcer::nuke_props(&sys, table::NUKE_PIF);
+    enforcer::nuke_props(&sys, table::NUKE_CUSTOM_ROM);
+
     let props: Vec<(&str, &str)> = table::GENERAL
         .iter()
         .map(|p| (p.name, p.value))
         .collect();
-    enforcer::enforce_once(&sys, &props);
+    enforcer::enforce_stealth(&sys, &props);
 
     let size = config.brene.vbmeta_size.to_string();
-    let _ = sys.set("ro.boot.vbmeta.size", &size);
-
-    if !config.brene.verified_boot_hash.is_empty() {
-        let _ = sys.set("ro.boot.vbmeta.digest", &config.brene.verified_boot_hash);
+    if sys.get("ro.boot.vbmeta.size").as_deref() != Some(&size) {
+        let _ = sys.set_stealth("ro.boot.vbmeta.size", &size);
     }
 
-    info!("general prop spoofing applied");
+    let hash = &config.brene.verified_boot_hash;
+    if !hash.is_empty() && sys.get("ro.boot.vbmeta.digest").as_deref() != Some(hash.as_str()) {
+        let _ = sys.set_stealth("ro.boot.vbmeta.digest", hash);
+    }
+
+    info!("prop spoofing applied (stealth mode)");
     Ok(())
 }
 

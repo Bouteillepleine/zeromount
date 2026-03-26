@@ -35,3 +35,32 @@ pub(super) static GENERAL: &[PropEntry] = &[
     PropEntry { name: "ro.boot.warranty_bit", value: "0" },
     PropEntry { name: "ro.warranty_bit", value: "0" },
 ];
+
+// Props that leak PIF module presence
+pub(super) static NUKE_PIF: &[&str] = &[
+    "persist.sys.pihooks.status",
+    "persist.sys.pihooks",
+    "ro.pihooks.enable",
+    "persist.pihooks.mainline_update",
+    "persist.sys.pixelprops.pi",
+    "persist.sys.pixelprops.gms",
+    "persist.sys.pixelprops.gphotos",
+    "persist.sys.pixelprops.netflix",
+];
+
+// Props that leak custom ROM identity
+pub(super) static NUKE_CUSTOM_ROM: &[&str] = &[
+    "ro.lineage.build.version",
+    "ro.lineage.build.version.plat_sdk",
+    "ro.lineage.version",
+    "ro.lineage.display.version",
+    "ro.lineage.releasetype",
+    "ro.lineageaudio.version",
+    "ro.crdroid.build.version",
+    "ro.crdroid.version",
+    "ro.crdroid.display.version",
+    "ro.modversion",
+    "ro.romversion",
+    "ro.rom.build.display.id",
+    "ro.custom.build.version",
+];
