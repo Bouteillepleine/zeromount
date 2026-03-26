@@ -395,7 +395,7 @@ pub struct GuardConfig {
     pub systemui_max_restarts: u32,
     #[serde(default = "default_systemui_absent")]
     pub systemui_absent_timeout_secs: u32,
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub systemui_monitor_enabled: bool,
     #[serde(default = "default_allowed_modules")]
     pub allowed_modules: Vec<String>,
@@ -416,7 +416,7 @@ impl Default for GuardConfig {
             systemui_poll_secs: 4,
             systemui_max_restarts: 3,
             systemui_absent_timeout_secs: 25,
-            systemui_monitor_enabled: true,
+            systemui_monitor_enabled: false,
             allowed_modules: vec!["meta-zeromount".to_string()],
             allowed_scripts: Vec::new(),
         }
